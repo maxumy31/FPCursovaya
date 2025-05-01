@@ -1,11 +1,28 @@
 'use client'
 import { readonlyArray } from 'fp-ts';
 import { State } from 'fp-ts/State';
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { pipe } from 'fp-ts/function';
+import * as WS from '@/app/Websocket'
+import * as E from 'fp-ts/lib/Either';
+import { TaskEither } from 'fp-ts/lib/TaskEither';
 
 export default function GameWindows(){
-    const canvasRef = useRef<HTMLCanvasElement>(null)
+  const URL = "ws://localhost:9090/ws"
+
+
+  useEffect(() => {
+    const clientPromise : TaskEither<string,WS.WebSocketClient> =  WS.NewWebsocketClient(URL)
+    clientPromise().then(eith => {
+      console.log(eith)
+    })
+  })
+
+  return(<>
+  
+  </>)
+}
+    /*const canvasRef = useRef<HTMLCanvasElement>(null)
 
     useEffect(() => {
       if (!canvasRef.current) return
@@ -59,3 +76,4 @@ function UpdateGame(session:Session,player:PlayerData,userData:UserData[],input:
     return [session,effects]
 }
 
+*/
