@@ -28,7 +28,7 @@ const createNewSession = HTTP.FPFetch<string>({
 })
 
 
-const checkSessionExisting = (n : number) => HTTP.FPFetch<string>({
+const checkSessionExisting = (n : string) => HTTP.FPFetch<string>({
     method:"GET",
     path:"/session/" + n
 })
@@ -78,9 +78,17 @@ export default function AuthPage() {
                         case "None":
                             console.log("No response from server")
                             setLoaded(true)
+                            break
                         case "Some":
-                            console.log(id._tag,"SOME")
-                            router.push("/gameWindow")
+                            const data = {
+                                "sessionId":id.value,
+                                "userId":userId,
+                            }
+                            const dataParams = new URLSearchParams({
+                                data: JSON.stringify(data)
+                            })
+                            router.push(`/gameWindow?${dataParams}`)
+                              break
                     }
             }
         })
@@ -89,11 +97,10 @@ export default function AuthPage() {
     }
 
     const OnEnterExistingSessionClick = ():void => {
-        if(!sessionIdInputRef.current || !Number(sessionIdInputRef.current.value)) {
+        if(!sessionIdInputRef.current) {
             return
         }
-        const sessionId = Number(sessionIdInputRef.current.value)
-
+        const sessionId = sessionIdInputRef.current.value
         checkSessionExisting(sessionId)(config)().then(v => {
             setLoaded(false)
             switch(v._tag) {

@@ -1,21 +1,105 @@
 'use client'
-import { readonlyArray } from 'fp-ts';
+import { eitherT, readonlyArray } from 'fp-ts';
 import { State } from 'fp-ts/State';
 import { useRef, useEffect, useMemo } from 'react'
 import { pipe } from 'fp-ts/function';
 import * as WS from '@/app/Websocket'
 import * as E from 'fp-ts/lib/Either';
-import { TaskEither } from 'fp-ts/lib/TaskEither';
+import * as TE from 'fp-ts/lib/TaskEither';
+import { ReadonlyURLSearchParams, useParams, useSearchParams } from 'next/navigation';
+import { serialize } from 'v8';
+import * as IO from 'fp-ts/lib/IO';
+import * as O from "fp-ts/lib/Option"
+import { Task } from 'fp-ts/lib/Task';
+import { map } from 'fp-ts/lib/EitherT';
+
+type WebsocketCommands = 
+{
+  operationType:"reserveNewConnection",
+  data : {
+    "id":string,
+    "sessionId":string,
+  }
+} | 
+{
+  operationType:"makeMove",
+  data : {
+    "id":string,
+    "sessionId":string,
+    "cardId":string,
+  }
+}
+
+
+type UserConnectionData = {
+  userId :BigInt
+  sessionId:BigInt
+}
+
+const ParseParams = (params:ReadonlyURLSearchParams | null) : O.Option<UserConnectionData> => {
+  return pipe(
+    params,
+    O.fromNullable,
+    O.flatMap(searchParams => {
+        const data = searchParams.get('data');
+        const parsedData = data ? JSON.parse(data) : null;
+        if(parsedData) {
+          return O.some(parsedData)
+        } else {
+          return O.none
+        }
+      })
+    )
+  }
+
+  const SendCommand = (command: WebsocketCommands, client : WS.WebSocketClient):TE.TaskEither<string,void> => {
+    console.log("sending")
+    return client.Send(JSON.stringify(command))
+  }
+
+
+  
+
+  const EstablishConnection = (clientPromise : TE.TaskEither<string,WS.WebSocketClient>, 
+    userData : O.Option<UserConnectionData>): TE.TaskEither<string,void>  => {
+
+      const TryConnectToSession = (userParams : UserConnectionData, client : WS.WebSocketClient):TE.TaskEither<string,void> => {
+        const connectionMessage : WebsocketCommands = {
+          operationType:"reserveNewConnection",
+          data : {
+            "id": String(userParams.userId),
+            "sessionId" : String(userParams.sessionId)
+          }
+        }
+        return SendCommand(connectionMessage,client)
+      }
+
+      const userDataEither = E.fromOption(() => "UserData is missing")(userData)
+
+      return pipe(
+        clientPromise,
+        TE.chain(client => 
+          pipe(
+            userDataEither,
+            TE.fromEither,
+            TE.chain(userParams => TryConnectToSession(userParams,client))
+          )
+        )
+      )
+  }
+
+
 
 export default function GameWindows(){
   const URL = "ws://localhost:9090/ws"
 
-
+  const searchParams = useSearchParams();
+  
+  
   useEffect(() => {
-    const clientPromise : TaskEither<string,WS.WebSocketClient> =  WS.NewWebsocketClient(URL)
-    clientPromise().then(eith => {
-      console.log(eith)
-    })
+    const clientPromise : TE.TaskEither<string,WS.WebSocketClient> =  WS.NewWebsocketClient(URL)
+    const parsedParams = ParseParams(searchParams)
+    EstablishConnection(clientPromise,parsedParams)()
   })
 
   return(<>
