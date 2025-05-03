@@ -31,13 +31,12 @@ export const NewWebsocketClient = (url: string): TE.TaskEither<WebSocketClientEr
                 (error) => reject(error),
                 (ws) => {
                   ws.onmessage = (event) => {
-                        console.log("message recieved")
+                      console.log("message recieved")
+                      console.log("msg = ",event.data.toString())
                       queue.Add(event.data.toString())(); 
                   }
-  
                   resolve({
-                    Send: (message: string) => 
-                      TE.tryCatch(
+                    Send: (message: string) => TE.tryCatch(
                         () => 
                           new Promise<void>((resolve, reject) => {
                             try {
@@ -48,13 +47,9 @@ export const NewWebsocketClient = (url: string): TE.TaskEither<WebSocketClientEr
                             }
                           }),
                         (error) => `Send error: ${error}`
-                      ),
-  
-                    Read: () => queue.Read,
-  
-                    Close: () => {
-                      ws.close();
-                    }
+                    ),
+                    Read: () => queue.Read,  
+                    Close: () => {ws.close();}
                   });
                 }
               )

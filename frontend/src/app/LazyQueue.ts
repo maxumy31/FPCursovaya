@@ -17,14 +17,14 @@ export const NewLazyQueue = <T, E = LazyQueueError>(): IO.IO<LazyQueue<T, E>> =>
   
       return {
         Add: (item: T) => () => {
-          queue = [...queue, item];
+          queue = [...queue, item]
         },
   
         Read: pipe(
           IO.of(queue),
           IO.chain((data) => {
-            if (data.length === 0) {
-              return IO.of(E.left<E, T>("Empty" as E));
+            if (queue.length === 0) {
+              return IO.of(E.left<E, T>("Empty" as E))
             }
             const [head, ...tail] = data;
             queue = tail;
