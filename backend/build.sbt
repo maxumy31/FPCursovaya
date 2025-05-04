@@ -15,9 +15,11 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
   "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
   "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
+  "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion,
+  "com.typesafe.akka" %% "akka-http-testkit" % AkkaHttpVersion,
 )
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18"
-
+scalacOptions += "-Xmax-inlines:64"
 libraryDependencies += "org.typelevel" %% "cats-effect" % "3.6.1"
 
 val circeVersion = "0.14.12"

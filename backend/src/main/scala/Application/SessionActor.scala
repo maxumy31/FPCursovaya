@@ -6,9 +6,9 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.{Actor, ActorRef}
 
 
-sealed trait SessionCommand
+//sealed trait SessionCommand
 
-object SessionActor {
+/*object SessionActor {
   def apply(): Behavior[SessionCommand] = 
     Behaviors.setup { (setupCtx) => {
       setupCtx.log.info("New session created")
@@ -17,3 +17,4 @@ object SessionActor {
         Behaviors.same
       }}
 }}
+*/

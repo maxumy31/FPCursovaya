@@ -1,4 +1,25 @@
 package Domain
 
-case class GameState(round:Int, turn:Int, playersTotal:Int,
-                     playersLeft:Int, map: Map[IUser,Deck])
+
+
+case class PlayingState(
+                      round:Int,
+                      turn:Int,
+                      players : Seq[(Long,Deck)]
+                    )
+
+case class WaitingState(
+                         players : Seq[Long],
+                         )
+
+case class VotingState(
+                 playersAndVotes : Seq[(Long,Option[Long],Deck)],
+                 turn : Int
+                 )
+
+
+case class GameEnded(
+                    winners: Seq[(Long,Deck)]
+)
+
+type GameState = PlayingState | WaitingState | VotingState | GameEnded

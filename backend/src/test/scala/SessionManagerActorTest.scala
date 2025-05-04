@@ -1,5 +1,5 @@
 
-import Application.{CreateSession, SessionManagerActor}
+import Application.Actors.{CreateSession, SessionManagerActor}
 import Transport.*
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}

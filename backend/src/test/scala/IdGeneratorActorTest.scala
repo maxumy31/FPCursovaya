@@ -1,4 +1,5 @@
-import Application.{IdGenerateRequest, IdGeneratorActor}
+import Application.Actors.IdGeneratorActor
+import Application.IdGenerateRequest
 import Transport.*
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}

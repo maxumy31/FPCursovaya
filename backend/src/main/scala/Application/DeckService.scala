@@ -6,7 +6,46 @@ import Domain.CardType.*
 
 import scala.util.Random
 
-val StandartDeck : Deck = {
+
+def ShuffleDeck(deck: Deck, seed: Long): Deck = {
+  val random = new Random(seed)
+  val combined = deck.cards.zip(deck.revealed).toList
+  val shuffled = random.shuffle(combined)
+  val (newCards, newRevealed) = shuffled.unzip
+  Deck(newCards, newRevealed)
+}
+
+def GeneratePlayerSet(deck: Deck): (List[Card], Deck) = {
+  val requiredTypes = List(
+    Profession,
+    Biology,
+    Health,
+    Hobby,
+    Item,
+    Fact
+  )
+
+  requiredTypes.foldLeft((List.empty[Card], deck)) {
+    case ((collected, currentDeck), cardType) =>
+      TakeFirstCardOfType(currentDeck, cardType) match {
+        case (Some(card), newDeck) => (collected :+ card, newDeck)
+        case (None, newDeck) => (collected, newDeck)
+      }
+  }
+}
+
+def TakeFirstCardOfType(deck: Deck, cardType: CardType): (Option[Card], Deck) = {
+  deck.cards.indexWhere(_.cardType == cardType) match {
+    case -1 => (None, deck)
+    case index =>
+      val (before, after) = deck.cards.splitAt(index)
+      val newCards = before ++ after.tail
+      val newRevealed = deck.revealed.take(index) ++ deck.revealed.drop(index + 1)
+      (Some(after.head), Deck(newCards, newRevealed))
+  }
+}
+
+/*val StandardDeck : Deck = {
   def genCard(t:CardType,left:Int):Seq[Card] = {
     if left == 0 then Seq(Card(t,"test" + left.toInt)) else {
       genCard(t,left-1) ++ Seq(Card(t,"test" + left.toInt))
@@ -72,4 +111,4 @@ def CreatePlayerDeck(deck:Deck):Option[(Seq[Card],Deck)] = {
   )
 
   if isValid then Some(found,Deck(newCards)) else None
-}
+}*/

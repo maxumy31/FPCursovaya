@@ -1,4 +1,5 @@
 import Application.*
+import Application.Actors.{MainActor, MainRequest}
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
@@ -19,6 +20,11 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.stream.scaladsl.Flow
 
+import io.circe.*
+import io.circe.parser.*
+import io.circe.generic.auto._
+import io.circe.syntax._
+
 import scala.collection.immutable.HashMap
 
 object Main extends App {
@@ -28,8 +34,10 @@ object Main extends App {
 
 
   val restRoutes = NewRestRoutes(system)
+  val wsRoutes = NewWebsocketRoute(system)
 
-  val server = Http().newServerAt("localhost", 9090).bind(restRoutes ~ webSocket)
+
+  val server = Http().newServerAt("localhost", 9090).bind(restRoutes ~ wsRoutes)
 
   server.map { _ =>
     println("Successfully started on localhost:9090 ")
