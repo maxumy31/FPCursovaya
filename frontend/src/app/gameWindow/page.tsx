@@ -1,5 +1,5 @@
 'use client'
-import {GameState,UserConnectionData, PageState, ParseUserDataAction, TransitFailedState} from "@/app/gameWindow/GamePageMonadReducer"
+
 import { eitherT, readonlyArray, state } from 'fp-ts';
 import { useRef, useEffect, useMemo, useState, JSX, useReducer } from 'react'
 import { pipe } from 'fp-ts/function';
@@ -13,206 +13,136 @@ import * as O from "fp-ts/lib/Option"
 import * as T from 'fp-ts/lib/Task';
 import { map } from 'fp-ts/lib/EitherT';
 import * as S from 'fp-ts/lib/State';
-import { useStateMonad } from './StateMonadHook';
 import { WebsocketCommands } from "./WebsocketManipulations";
+import Reduce, { GameAction, GameState } from './GameStateReducer';
+
+
+const URL = "ws://localhost:9090/ws"
 
 
 
+export type UserConnectionData = {
+  sessionId:string,
+  userId:string,
+}
 
-  const CreateWaitingPage = (data : O.Option<UserConnectionData>, gameState : GameState) : JSX.Element => {
-    const IsHost = (userData:UserConnectionData) : boolean => String(userData.userId) == gameState.players[0]
+const ParseParams = (params:ReadonlyURLSearchParams | null) : O.Option<UserConnectionData> => {
     return pipe(
-      data,
-      O.map(user => IsHost(user) ? O.some(user) : O.none),
-      O.fold(
-        () => {
-          return <div>Ждем хоста</div>
-        },
-        (userData) => {
-          return <button>Начать игру</button>
-        }
+      params,
+      O.fromNullable,
+      O.flatMap(searchParams => {
+          const data = searchParams.get('data');
+          const parsedData = data ? JSON.parse(data) : null;
+          if(parsedData) {
+            return O.some(parsedData)
+          } else {
+            return O.none
+          }
+        })
       )
-
-    )
   }
 
-  const ParseParams = (params:ReadonlyURLSearchParams | null) : O.Option<UserConnectionData> => {
-      return pipe(
-        params,
-        O.fromNullable,
-        O.flatMap(searchParams => {
-            const data = searchParams.get('data');
-            const parsedData = data ? JSON.parse(data) : null;
-            if(parsedData) {
-              return O.some(parsedData)
-            } else {
-              return O.none
-            }
-          })
-        )
-      }
+  const ParamsToInitialState = (conData : O.Option<UserConnectionData>): GameState => {
+    const state:O.Option<GameState> =  pipe(
+      conData,
+      O.map((conData : UserConnectionData) => {
+          const initState : GameState = {
+            type:"WaitingForConnection",
+            markup:<div>Подключаемся...</div>,
+            connectionData:conData
+          }
+          return initState
+        }
+      )
+    )
+    const emptyState : GameState = {
+      type:"EmptyState",
+      markup:<div>Произошла ошибка. Нету данных для подключения</div>
+    }
+    return state._tag == "Some" ? state.value : emptyState
+
+  }
 
 
 
 export default function GameWindows(){
-  const URL = "ws://localhost:9090/ws"
 
-  const searchParams = useSearchParams();
-  const parsedParams = ParseParams(searchParams)
+  //Парсим данные со строки
+  const params = useSearchParams()
+  const parsedParams = ParseParams(params)
 
-  const [page,setPage] = useState<JSX.Element>(<div></div>)
-  const initState : PageState = {
-    type:"initState",
-    args:parsedParams
-  }
-  
-  const [state, runState] = useStateMonad<PageState>(initState)
+  //Если есть куда конектится, то пытаемся. Если нет, то забиваем
+  const [currentState,actionReducer] = useReducer(Reduce,ParamsToInitialState(parsedParams))
 
-  const gameState : GameState = {players : ["7076646890315895000"],gameStarted:false}
-
-  const SetWebsocketConnectionCheck = (ws: WS.WebSocketClient) : IO.IO<void> => {
-    setTimeout(() => {
-      const con : WebsocketCommands = {
-        "operationType":"reserveNewConnection",
-        "data":{
-          "id":"123",
-          "sessionId":"123"
-        }
-      }
-      ws.Send(JSON.stringify(con))()
-      console.log("Sent")
-    }, 1000);
-    return (() => {const a = 3})
-  }
-
-
-  const StartListening = (ws:WS.WebSocketClient) : IO.IO<void> => {
-    setTimeout(() => {
-      ws.Read()().then(msg => {
-        switch(msg._tag) {
-          case "Left":
-            console.log("error")
-            break
-          case "Right":
-            console.log(msg.right)
-            break
-        }
-      })
-      StartListening(ws)
-    },1000)
-    
-    return (() => {const a=3})
-  }
-  
-  
-  useEffect(() => {
-    
-    const state : S.State<PageState,JSX.Element> = (state) => {
-      switch (state.type) {
-        case "initState":
-          const a = pipe(
-            parsedParams,
-            O.map(opt => {
-              const client = WS.NewWebsocketClient(URL)
-              return client
-          }),
-          O.map(opt => {
-            opt().then(eith => {
-              switch(eith._tag) {
-                case "Left":
-                  console.log("left")
-                  setTimeout(() => console.log("timeout"),100)
-                  break
-                case "Right":
-                  const client = eith.right
-                  SetWebsocketConnectionCheck(client)
-                  StartListening(client)()
-              }
-            })
-          })
+  const ConnectWS = (URL:string,parsedParams:O.Option<UserConnectionData>) => {
+    //Пытаемся законектится
+    pipe(
+      parsedParams,
+      O.map(conData => {
+        WS.NewWebsocketClient(URL)().then(
+          eith => AfterWSConnection(eith)
         )
-          break
+      })
+    )
+  }
+
+
+  const AfterWSConnection = (eith:E.Either<string,WS.WebSocketClient>) => {
+    switch(eith._tag)
+    {
+    case 'Left':
+      const actionL :GameAction = {
+        type:"CannotConnect"
       }
-      return [<div></div>,state]
+      actionReducer(actionL)
+      break
+    case 'Right':
+      const actionR : GameAction = {
+        type:"ConnectedWS",
+        client:eith.right
+      }
+      actionReducer(actionR)
+      break
     }
-    state(initState)
-    /*type StateType = S.State<PageState, TE.TaskEither<JSX.Element,JSX.Element>>
+  }
 
-    console.log("Before",state)
-    const handleAction = async () => {
-      try {
-        await runState(TransitFailedState());
-        console.log("Final state:", state); 
-      } catch (error) {
-        console.error("Error:", error);
+
+  const ReserveConnectionWithWS = (ws:WS.WebSocketClient,connection : UserConnectionData) => {
+    const msg : WebsocketCommands =  {
+      "operationType":"reserveNewConnection",
+      "data" : {
+        "id":connection.sessionId,
+        "sessionId":connection.userId,
       }
     }
-    handleAction()
+    ws.Send(JSON.stringify(msg))()
+    
+  }
 
-    const UpdateUI = (page : E.Either<JSX.Element,JSX.Element>): IO.IO<void> => {
-      console.log(page)
-      return pipe(
-        page,
-        E.fold(
-          (left) => () => {
-            setPage(left)},
-          (right) => () => {
-            setPage(right)}
-        ),
-      )
-    }*/
-
-    /*
-    const HandleStateTransition = (
-      action: StateType,
-      currentState: PageState
-    ): [TE.TaskEither<JSX.Element, JSX.Element>, PageState] => {
-      const [result, newState] = action(currentState)
-      return [result, newState]
-    }
+  useEffect(() => {
 
     
 
-    /*const TransitAndUpdate = (
-      action: StateType,
-      currentState: PageState
-    ): PageState => {
-      const [result, newState] = HandleStateTransition(action,state)
-      UpdateUI(result)()
-      return newState
-    }*/
+  })
 
-    /*const [page,nState] = S.get<PageState>()(state)
+  useEffect(() => {
+    switch(currentState.type)
+    {
+      case 'EmptyState':
+        break
+      case 'FailedToConnect':
+        break
+      case 'WaitingForConnection':
+        ConnectWS(URL,parsedParams)
+        break
+      case 'WaitingForState':
+        ReserveConnectionWithWS(currentState.connection,currentState.connectionData)
+        break
+    }
+  },[currentState])
 
-    const StatePipeline = pipe(
-      S.get<PageState>(),
-      S.map((curState : PageState) => {
-        const [page, newState] = ParseUserDataAction()(curState)
-        pipe(
-          page,
-          TE.fold(
-            (left) => {
-              setPage(left)
-              return T.of(undefined)
-            },
-            (right) => {
-              setPage(right)
-              return T.of(undefined)
-            }
-          )
-        )()
-        return newState
-      }//return TransitAndUpdate(ParseUserDataAction(),state)}),
-  
-    ))(state)
-    
-    */
-
-  },[])
-
-  const startButton = <div><button>Начать игру</button></div>
 
   return(<>
-    {page}
+    {currentState.markup}
   </>)
 }

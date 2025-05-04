@@ -1,3 +1,4 @@
 {
+  "/page": "app/page.js",
   "/gameWindow/page": "app/gameWindow/page.js"
 }

@@ -34,8 +34,8 @@ const checkSessionExisting = (n : string) => HTTP.FPFetch<string>({
 })
 
 
-const IdRespToId = (data:string): O.Option<number> => {
-    const findId = (json:any) : O.Option<number> => json["data"] && 
+const IdRespToId = (data:string): O.Option<string> => {
+    const findId = (json:any) : O.Option<string> => json["data"] && 
         json["data"]["id"] && json["errors"] == null ? O.some(json["data"]["id"]) : O.none
         
     return pipe(
@@ -44,8 +44,8 @@ const IdRespToId = (data:string): O.Option<number> => {
     )
 }
 
-const sesIdRespToSesId = (data:string): O.Option<number> => {
-    const findId = (json:any) : O.Option<number> => json["data"] && 
+const sesIdRespToSesId = (data:string): O.Option<string> => {
+    const findId = (json:any) : O.Option<string> => json["data"] && 
         json["data"]["id"] && json["errors"] == null && json["data"] != "Session not found" ? O.some(json["data"]["id"]) : O.none
         
     return pipe(
@@ -57,7 +57,7 @@ const sesIdRespToSesId = (data:string): O.Option<number> => {
 
 export default function AuthPage() {
     const [isLoading, setLoaded] = useState(true)
-    const [userId,setUserId] = useState(0)
+    const [userId,setUserId] = useState("")
     const [errorMessage,setErrorMessage] = useState("")
     const sessionIdInputRef = useRef<HTMLInputElement>(null);
     const router = useRouter()
@@ -105,7 +105,6 @@ export default function AuthPage() {
             setLoaded(false)
             switch(v._tag) {
                 case "Left":
-                    console.log("No response from server")
                     setLoaded(true)
                     break
                 case "Right":
@@ -113,12 +112,19 @@ export default function AuthPage() {
                     const id = IdRespToId(v.right)
                     switch(id._tag) {
                         case "None":
-                            console.log("Session does not exist")
                             setErrorMessage("Сессия не найдена.")
                             setLoaded(false)
                             break
                         case "Some":
-                            router.push("/gameWindow")
+                            const data = {
+                                "sessionId":sessionId,
+                                "userId":id.value,
+                            }
+                            const dataParams = new URLSearchParams({
+                                data: JSON.stringify(data)
+                            })
+                            router.push(`/gameWindow?${dataParams}`)
+                            break
                     }
             }
         })
@@ -153,7 +159,7 @@ export default function AuthPage() {
     <div className={styles.center_block}>
         <div>Ваш ID = {userId}</div>
         <div>Создать новую игру или присоединиться к уже созданной?</div>
-        <div><input ref = {sessionIdInputRef} className={styles.center_input} type = "number" /></div>
+        <div><input ref = {sessionIdInputRef} className={styles.center_input}/></div>
         {errorMessage}
         <div><button onClick = {OnEnterExistingSessionClick} className={styles.center_button}>Зайти</button></div>
         <div><button onClick = {OnCreateNewSessionButtonClick} className={styles.center_button}>Создать новую</button></div>
