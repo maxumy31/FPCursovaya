@@ -17,6 +17,7 @@ import io.circe.parser.*
 import io.circe.generic.auto._
 import io.circe.syntax._
 
+import Application.Actors.*
 
 final case class WebsocketCommandWithReply(replyTo:ActorRef[String],command:WebsocketCommand)
 sealed trait WebsocketCommand

@@ -1,3 +1,0 @@
-package Domain
-
-trait IUser
