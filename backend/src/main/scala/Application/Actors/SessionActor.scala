@@ -7,11 +7,11 @@ import akka.actor.typed.scaladsl.Behaviors
 
 
 sealed trait SessionCommand
-case class AddGuestPlayer(notifyActor: ActorRef[NotifyCommand], guestId:Long) extends SessionCommand
-case class LeaveGame(notifyActor: ActorRef[NotifyCommand], guestId:Long) extends SessionCommand
-case class RevealCard(notifyActor: ActorRef[NotifyCommand], guestId:Long,cardId:Int) extends SessionCommand
-case class StartGame(notifyActor: ActorRef[NotifyCommand], guestId:Long) extends SessionCommand
-case class VoteForPlayer(notifyActor: ActorRef[NotifyCommand], target:Long, initiator : Long) extends SessionCommand
+case class AddGuestPlayer(notifyActor: ActorRef[NotifyCommand], guestId:String) extends SessionCommand
+case class LeaveGame(notifyActor: ActorRef[NotifyCommand], guestId:String) extends SessionCommand
+case class RevealCard(notifyActor: ActorRef[NotifyCommand], guestId:String,cardId:Int) extends SessionCommand
+case class StartGame(notifyActor: ActorRef[NotifyCommand], guestId:String) extends SessionCommand
+case class VoteForPlayer(notifyActor: ActorRef[NotifyCommand], target:String, initiator : String) extends SessionCommand
 
 
 

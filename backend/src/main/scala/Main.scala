@@ -36,6 +36,7 @@ object Main extends App {
   val restRoutes = NewRestRoutes(system)
   val wsRoutes = NewWebsocketRoute(system)
 
+  
 
   val server = Http().newServerAt("localhost", 9090).bind(restRoutes ~ wsRoutes)
 

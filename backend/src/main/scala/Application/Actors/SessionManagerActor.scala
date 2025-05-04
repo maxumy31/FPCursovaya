@@ -14,14 +14,14 @@ import scala.util.{Failure, Success, Try}
 
 sealed trait SessionManagerCommand
 final case class CreateSession(replyTo:ActorRef[SessionCreatedResponse]) extends SessionManagerCommand
-final case class IdForSessionCreated(replyTo: ActorRef[SessionCreatedResponse], id:Long) extends SessionManagerCommand
-final case class CheckSessionExists(replyTo:ActorRef[SessionManagerResponse], id:Long) extends SessionManagerCommand
-final case class DeleteSession(replyTo:ActorRef[SessionAccessResponse], id:Long) extends SessionManagerCommand
-final case class SessionCommandProxy(sessionId : Long,sessionCommand: SessionCommand) extends SessionManagerCommand
+final case class IdForSessionCreated(replyTo: ActorRef[SessionCreatedResponse], id:String) extends SessionManagerCommand
+final case class CheckSessionExists(replyTo:ActorRef[SessionManagerResponse], id:String) extends SessionManagerCommand
+final case class DeleteSession(replyTo:ActorRef[SessionAccessResponse], id:String) extends SessionManagerCommand
+final case class SessionCommandProxy(sessionId : String,sessionCommand: SessionCommand) extends SessionManagerCommand
 
 sealed trait SessionManagerResponse
-final case class SessionCreatedResponse(id: Long) extends SessionManagerResponse
-final case class SessionAccessResponse(actorId: Long) extends SessionManagerResponse
+final case class SessionCreatedResponse(id: String) extends SessionManagerResponse
+final case class SessionAccessResponse(actorId: String) extends SessionManagerResponse
 object SessionNotFoundResponse extends SessionManagerResponse
 
 object SessionDeletedResponse extends SessionManagerResponse
@@ -30,7 +30,7 @@ object SessionManagerActor  {
   implicit val timeout: Timeout = 3.seconds
 
   def apply(SessionIdGenerator: ActorRef[GenerateId])
-           (map: HashMap[Long, ActorRef[SessionCommand]]): Behavior[SessionManagerCommand | SessionCommand] =
+           (map: HashMap[String, ActorRef[SessionCommand]]): Behavior[SessionManagerCommand | SessionCommand] =
     Behaviors.receive { (ctx, msg) => {
       msg match
         case CreateSession(from) =>
@@ -40,7 +40,7 @@ object SessionManagerActor  {
 
         case IdForSessionCreated(replyTo, id) =>
           ctx.log.info(s"New session with id $id registered")
-          val newSessionRef = ctx.spawn(SessionActor(WaitingState(Seq()))(SessionService), s"Session$id")
+          val newSessionRef = ctx.spawnAnonymous(SessionActor(WaitingState(Seq()))(SessionService))
           replyTo ! SessionCreatedResponse(id)
           this (SessionIdGenerator)(map.updated(id, newSessionRef))
 
@@ -51,9 +51,17 @@ object SessionManagerActor  {
           Behaviors.same
 
         case Application.Actors.DeleteSession(_, _) => ???
-        case SessionCommandProxy(id,cmd) => 
-          map(id) ! cmd
-          Behaviors.same
+        case SessionCommandProxy(id,cmd) =>
+          val contains = map.contains(id)
+          if(contains)  {
+            ctx.log.info("Using command",cmd,"for id =",id)
+            map(id) ! cmd
+            Behaviors.same
+          } else {
+            Behaviors.same
+          }
+
+
     }
     }
 }

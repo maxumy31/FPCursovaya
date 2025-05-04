@@ -45,16 +45,16 @@ import Domain.*
 sealed trait ISessionService:
   val LastRound = 5
   def apply(state:GameState, command : SessionCommand) : GameState
-  def AddPlayerService(state: GameState,id : Long):GameState
+  def AddPlayerService(state: GameState,id : String):GameState
   def TransferNextState(state: GameState) : GameState
-  def VotePlayer(state:GameState, target:Long, from : Long) : GameState
-  def RevealCard(state:GameState, card:Int, id:Long) : GameState
-  def DeletePlayerService(state:GameState, whoToDelete:Long) : GameState
-  def StartGame(state:GameState, initiator : Long) : GameState
+  def VotePlayer(state:GameState, target:String, from : String) : GameState
+  def RevealCard(state:GameState, card:Int, id:String) : GameState
+  def DeletePlayerService(state:GameState, whoToDelete:String) : GameState
+  def StartGame(state:GameState, initiator : String) : GameState
 
 object SessionService extends ISessionService{
 
-  def AddPlayerService(state: GameState, id: Long): GameState = {
+  def AddPlayerService(state: GameState, id: String): GameState = {
     state match
       case WaitingState(lobby) =>
         WaitingState(lobby.appended(id))
@@ -62,7 +62,7 @@ object SessionService extends ISessionService{
   }
 
   def TransferNextState(state: GameState): GameState = {
-    def mostFrequent(items: Seq[Long]): Seq[Long] = {
+    def mostFrequent(items: Seq[String]): Seq[String] = {
       if (items.isEmpty) return Seq.empty
 
       val frequencyMap = items.groupBy(identity).view.mapValues(_.size)
@@ -101,7 +101,7 @@ object SessionService extends ISessionService{
 
       case PlayingState(rnd, trn, players) =>
         if(trn >= players.length) {
-          def transit(l:Long,d:Deck) : (Long,Option[Long],Deck) = {
+          def transit(l:String,d:Deck) : (String,Option[String],Deck) = {
             (l,None,d)
           }
           VotingState(players.map(transit),rnd)
@@ -111,7 +111,7 @@ object SessionService extends ISessionService{
     }
   }
 
-  def VotePlayer(state:GameState, target:Long, from : Long) : GameState = {
+  def VotePlayer(state:GameState, target:String, from : String) : GameState = {
     state match
       case VotingState(playersAndVotes,rnd) =>
         if(playersAndVotes.exists((l, o, d) => l == target)) {
@@ -130,7 +130,7 @@ object SessionService extends ISessionService{
 
   }
 
-  def RevealCard(state:GameState, card:Int, id:Long) : GameState = {
+  def RevealCard(state:GameState, card:Int, id:String) : GameState = {
     state match
       case PlayingState(rnd,trn,players) =>
         val host = players.find((l,d) => l == id)
@@ -152,7 +152,7 @@ object SessionService extends ISessionService{
       case _ => state
   }
 
-  def DeletePlayerService(state:GameState, whoToDelete:Long) : GameState = {
+  def DeletePlayerService(state:GameState, whoToDelete:String) : GameState = {
     state match
       case VotingState(playersAndVotes,rnd) =>
         val newPlayers = playersAndVotes.flatMap((l,o,d) => if(l == whoToDelete) then None else Some(l,o,d))
@@ -163,7 +163,7 @@ object SessionService extends ISessionService{
         WaitingState(players.flatMap(l => if( l == whoToDelete) then None else Some(l)))
   }
 
-  def StartGame(state:GameState, initiator : Long) : GameState = {
+  def StartGame(state:GameState, initiator : String) : GameState = {
     def GenerateDeckForPlayer(deck : Deck,left:Int) : Seq[Deck] = {
       val (set,newDeck) = GeneratePlayerSet(deck)
       if(left <= 0) {

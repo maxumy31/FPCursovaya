@@ -21,11 +21,11 @@ import Application.Actors.*
 
 final case class WebsocketCommandWithReply(replyTo:ActorRef[String],command:WebsocketCommand)
 sealed trait WebsocketCommand
-final case class ReserveNewConnection(guestId:Long, sessionId : Long) extends WebsocketCommand
-final case class StartGameWSCommand(sessionId:Long,initiator:Long) extends WebsocketCommand
-final case class MakeVoteWSCommand(sessionId:Long, target:Long, initiator:Long) extends WebsocketCommand
-final case class RevealCardWSCommand(sessionId:Long,cardId:Int,initiator:Long) extends WebsocketCommand
-final case class LeaveGameWSCommand(sessionId:Long, initiator:Long) extends WebsocketCommand
+final case class ReserveNewConnection(guestId:String, sessionId : String) extends WebsocketCommand
+final case class StartGameWSCommand(sessionId:String,initiator:String) extends WebsocketCommand
+final case class MakeVoteWSCommand(sessionId:String, target:String, initiator:String) extends WebsocketCommand
+final case class RevealCardWSCommand(sessionId:String,cardId:Int,initiator:String) extends WebsocketCommand
+final case class LeaveGameWSCommand(sessionId:String, initiator:String) extends WebsocketCommand
 
 
 object WebsocketActor {
@@ -65,39 +65,48 @@ def JsonToWebsocketCommand(data:Json): Option[WebsocketCommand] = {
 
 
   def parseReserveConnection(cursor: HCursor): Either[io.circe.DecodingFailure, ReserveNewConnection] = {
+   /* val gId = cursor.downField("data").downField("id").as[String].map(_.toLong)
+    val sId = cursor.downField("data").downField("sessionId").as[BigInt].map(_.toLong)
+    gId match
+      case Left(value) => Left(value)
+      case Right(gId) =>
+        sId match
+          case Left(value) => Left(value)
+          case Right(sId) =>
+            Right(ReserveNewConnection(gId,sId))*/
     for {
-      gId <- cursor.downField("data").downField("id").as[Long]
-      sId <- cursor.downField("data").downField("sessionId").as[Long]
-    } yield ReserveNewConnection(gId, sId)
+       gId <- cursor.downField("data").downField("id").as[String]
+       sId <- cursor.downField("data").downField("sessionId").as[String]
+     } yield ReserveNewConnection(gId, sId)
   }
 
   def parseStartGame(cursor: HCursor): Either[io.circe.DecodingFailure, StartGameWSCommand] = {
     for {
-      init <- cursor.downField("data").downField("id").as[Long]
-      sId <- cursor.downField("data").downField("sessionId").as[Long]
+      init <- cursor.downField("data").downField("id").as[String]
+      sId <- cursor.downField("data").downField("sessionId").as[String]
     } yield StartGameWSCommand(sId, init)
   }
 
   def parseVoteCommand(cursor: HCursor): Either[io.circe.DecodingFailure, MakeVoteWSCommand] = {
     for {
-      init <- cursor.downField("data").downField("id").as[Long]
-      sId <- cursor.downField("data").downField("sessionId").as[Long]
-      trg <- cursor.downField("data").downField("targetId").as[Long]
+      init <- cursor.downField("data").downField("id").as[String]
+      sId <- cursor.downField("data").downField("sessionId").as[String]
+      trg <- cursor.downField("data").downField("targetId").as[String]
     } yield MakeVoteWSCommand(sId, trg, init)
   }
 
   def parseRevealCardCommand(cursor: HCursor): Either[io.circe.DecodingFailure, RevealCardWSCommand] = {
     for {
-      init <- cursor.downField("data").downField("id").as[Long]
-      sId <- cursor.downField("data").downField("sessionId").as[Long]
+      init <- cursor.downField("data").downField("id").as[String]
+      sId <- cursor.downField("data").downField("sessionId").as[String]
       cId <- cursor.downField("data").downField("cardId").as[Int]
     } yield RevealCardWSCommand(sId, cId, init)
   }
 
   def parseLeaveGameCommand(cursor: HCursor): Either[io.circe.DecodingFailure, LeaveGameWSCommand] = {
     for {
-      init <- cursor.downField("data").downField("id").as[Long]
-      sId <- cursor.downField("data").downField("sessionId").as[Long]
+      init <- cursor.downField("data").downField("id").as[String]
+      sId <- cursor.downField("data").downField("sessionId").as[String]
     } yield LeaveGameWSCommand(sId, init)
   }
 
@@ -113,6 +122,7 @@ def JsonToWebsocketCommand(data:Json): Option[WebsocketCommand] = {
         ("revealCard",parseRevealCardCommand),
         ("closeConnection",parseLeaveGameCommand)
       )
+      println(dispatcher.contains(operationString))
 
       dispatcher.find(_._1 == operationString) match
         case None => None

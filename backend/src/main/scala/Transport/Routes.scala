@@ -45,7 +45,7 @@ def NewRestRoutes(actor: ActorSystem[MainRequest]) : Route = {
           onComplete(operation) {
             case Success(GuestRegistered(data)) => {
               val respJSON = Json.obj(
-                "id" -> data.guestId.asJson
+                "id" -> data.asJson
               )
               val resp = HATEAOSResp(Right(respJSON))
               complete(resp)
@@ -76,13 +76,15 @@ def NewRestRoutes(actor: ActorSystem[MainRequest]) : Route = {
           }
         }
       } ~
-      path("session" / LongNumber) { id => {
+      path("session" / Remaining) { id => {
         delete {
           complete(s"session $id must be deleted")
         } ~
           get {
             println(id)
-            val operation : Future[SessionManagerResponse] = actor.ask(replyTo => SessionManagerCommandProxy(CheckSessionExists(replyTo,id)))
+            val operation : Future[SessionManagerResponse] = actor.ask(replyTo =>
+              SessionManagerCommandProxy(CheckSessionExists(replyTo,id)))
+
             onComplete(operation) {
               case Success(SessionAccessResponse(sesId)) =>
                 val respJSON = Json.obj(

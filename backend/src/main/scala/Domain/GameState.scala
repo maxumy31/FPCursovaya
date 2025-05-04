@@ -5,21 +5,21 @@ package Domain
 case class PlayingState(
                       round:Int,
                       turn:Int,
-                      players : Seq[(Long,Deck)]
+                      players : Seq[(String,Deck)]
                     )
 
 case class WaitingState(
-                         players : Seq[Long],
+                         players : Seq[String],
                          )
 
 case class VotingState(
-                 playersAndVotes : Seq[(Long,Option[Long],Deck)],
+                 playersAndVotes : Seq[(String,Option[String],Deck)],
                  turn : Int
                  )
 
 
 case class GameEnded(
-                    winners: Seq[(Long,Deck)]
+                    winners: Seq[(String,Deck)]
 )
 
 type GameState = PlayingState | WaitingState | VotingState | GameEnded

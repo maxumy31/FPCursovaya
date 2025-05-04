@@ -16,13 +16,13 @@ import scala.util.{Failure, Success}
 
 sealed trait MainRequest
 final case class RegisterGuest(replyTo:ActorRef[GuestRegistered]) extends MainRequest
-final case class IdForGuestGenerated(id:Long,replyTo:ActorRef[GuestRegistered]) extends MainRequest
+final case class IdForGuestGenerated(id:String,replyTo:ActorRef[GuestRegistered]) extends MainRequest
 
 final case class WebsocketMessageProxy(replyTo:ActorRef[String],command:WebsocketCommand) extends MainRequest
 final case class SessionManagerCommandProxy(command: SessionManagerCommand) extends MainRequest
 
 sealed trait MainResponse
-final case class GuestRegistered(data:GuestUser) extends MainResponse
+final case class GuestRegistered(data:String) extends MainResponse
 
 object MainActor {
   implicit val timeout: Timeout = 3.seconds
@@ -43,7 +43,8 @@ object MainActor {
 
     val Notifier : ActorRef[NotifyCommand] = setupCtx.spawn(NotifierActor(HashMap()),"NotifierActor")
 
-    val WebsocketManager : ActorRef[WebsocketCommandWithReply] = setupCtx.spawn(WebsocketActor(Notifier,SessionManager),"WebsocketManager")
+    val WebsocketManager : ActorRef[WebsocketCommandWithReply] = setupCtx.
+      spawn(WebsocketActor(Notifier,SessionManager),"WebsocketManager")
 
   Behaviors.receive{ (ctx,msg) => {
     msg match
@@ -53,9 +54,8 @@ object MainActor {
         Behaviors.same
       }
       case IdForGuestGenerated(id,replyTo) => {
-        val guest = GuestUser(id)
         ctx.log.info(s"Guest registered with id = $id")
-        replyTo ! GuestRegistered(guest)
+        replyTo ! GuestRegistered(id)
         Behaviors.same
       }
 

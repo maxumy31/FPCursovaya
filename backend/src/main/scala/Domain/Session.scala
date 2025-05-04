@@ -1,3 +1,3 @@
 package Domain
 
-case class Session(players:Seq[Long], gameState: GameState)
+case class Session(players:Seq[String], gameState: GameState)
