@@ -2,81 +2,70 @@ import { tryCatchK, fromIO, taskEither, chain } from 'fp-ts/TaskEither';
 import { IO, io } from 'fp-ts/IO';
 import { pipe } from 'fp-ts/function';
 import * as TE from 'fp-ts/lib/TaskEither';
+import * as TO from 'fp-ts/lib/TaskOption';
 import { left } from 'fp-ts/lib/EitherT';
 import { resolve } from 'path';
 import * as LQ from "@/app/LazyQueue"
 import * as E from 'fp-ts/lib/Either';
 
-type WebSocketError = string;
-type WebSocketClientError = LQ.LazyQueueError | string
+
 
 export type WebSocketClient = {
-    Send(message:string): TE.TaskEither<WebSocketError,void>,
-    Read(): TE.TaskEither<string,string>,
+    Send(message:string): TO.TaskOption<void>,
+    Read(): TO.TaskOption<string>,
     Close(): void,
 }
 
 
-export const NewWebsocketClient = (url: string): TE.TaskEither<WebSocketClientError, WebSocketClient> => {
-    return TE.tryCatch(
-      () =>
-        new Promise<WebSocketClient>((resolve, reject) => {
-          const wsConnection = NewWebsocketConnection(url);
-          const queue = LQ.NewLazyQueue<string>()();
-  
-          wsConnection().then(either => 
-            pipe(
-              either,
-              E.match(
-                (error) => reject(error),
-                (ws) => {
-                  ws.onmessage = (event) => {
-                      console.log("message recieved")
-                      console.log("msg = ",event.data.toString())
-                      queue.Add(event.data.toString())(); 
-                  }
-                  resolve({
-                    Send: (message: string) => TE.tryCatch(
-                        () => 
-                          new Promise<void>((resolve, reject) => {
-                            try {
-                              ws.send(message);
-                              resolve();
-                            } catch (err) {
-                              reject(err);
-                            }
-                          }),
-                        (error) => `Send error: ${error}`
-                    ),
-                    Read: () => queue.Read,  
-                    Close: () => {ws.close();}
-                  });
-                }
-              )
-            )
-          );
-        }),
-      (error) => 
-        `Connection failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-  };
 
-const NewWebsocketConnection = (url: string): TE.TaskEither<WebSocketError, WebSocket> =>
-    TE.tryCatch(
-      () =>
-        new Promise<WebSocket>((resolve, reject) => {
-          const ws = new WebSocket(url);
-          ws.onopen = () => resolve(ws)
-          ws.onerror = (err) => reject(err)
-        }),
-      (error) => `Connection failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+export const NewWebsocketClient = (url: string): TO.TaskOption<WebSocketClient> => {
+  return TO.tryCatch(
+    async () => {
+      const ws = new WebSocket(url);
+      
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve();
+        ws.onerror = (error) => reject(new Error('WebSocket connection error'));
+        ws.onclose = (event) => reject(new Error(`Connection closed: ${event.reason}`));
+      });
 
+      const queue = LQ.NewLazyQueue<string>()();
 
-const SendMessage = (ws:WebSocket, message:string):TE.TaskEither<WebSocketError,void> => 
-    TE.tryCatch(
-        () => new Promise<void>((resolve,reject) => {
-            ws.send(message)
+      ws.onmessage = (event) => {
+        queue.Add(event.data.toString())();
+      };
+
+      ws.onerror = () => {
+        queue.CancelAll(new Error('WebSocket error'))();
+      };
+
+      ws.onclose = (event) => {
+        queue.CancelAll(new Error(`WebSocket closed: ${event.reason}`))();
+      };
+
+      return {
+        Send: (message: string) => TO.tryCatch(
+          () => new Promise<void>((resolve, reject) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(message);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            } else {
+              reject(new Error('WebSocket is not open'));
+            }
+          })
+        ),
+        Read: () => TO.tryCatch(() => {
+          return queue.Read()
         }),
-        (error) => `Send error ${error}`
-    )
+        Close: () => {
+          ws.close();
+          queue.CancelAll(new Error('WebSocket closed by client'))();
+        },
+      };
+    }
+  );
+};

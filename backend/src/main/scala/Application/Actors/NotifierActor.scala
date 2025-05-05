@@ -16,52 +16,70 @@ case class AddConnection(id:String,replyTo:ActorRef[String]) extends NotifyComma
 case class RemoveConnection(id:String) extends NotifyCommand
 case class NotifyWith(state: GameState) extends NotifyCommand
 
+case class GameStateTransfer(gameState:String,data:GameState)
+
 object NotifierActor {
 
   def apply(connections : HashMap[String,ActorRef[String]]) : Behavior[NotifyCommand] = Behaviors.receive { (ctx, msg) =>
     msg match
-      case AddConnection(id,replyTo) => this(connections.updated(id,replyTo))
+      case AddConnection(id,replyTo) =>
+        val newConnections = connections.updated(id,replyTo)
+        ctx.log.info("New connections :"+newConnections.toString())
+        this(newConnections)
       case RemoveConnection(id) => this(connections.removed(id))
 
       case NotifyWith(state) =>
         state match
         case WaitingState(players) =>
-          ctx.log.info("Connected :",players.toString())
           val connectedPlayers = players.flatMap(l => if(connections.contains(l)) then Some(l) else None)
-          connectedPlayers.foreach(l => connections(l) ! WaitingState(players).asJson.noSpaces)
-          ctx.log.info("Sent :",WaitingState(players).asJson.noSpaces)
+          val dataToSend = AddTypeToJson(WaitingState(players).asJson,"waitingState").noSpaces
+          connectedPlayers.foreach(l => connections(l) ! dataToSend)
+          ctx.log.info("Sent :" + dataToSend)
           Behaviors.same
         case PlayingState(rnd,trn,players, apok,bnk) =>
           val connectedPlayers = players.flatMap { (l, d) => if (connections.contains(l)) then
             Some(l) else None
           }
-          connectedPlayers.foreach(l => connections(l) ! ObfuscateDeckForPlayer(
-            l,PlayingState(rnd,trn,players,apok,bnk)).asJson.noSpaces)
-
-          ctx.log.info("Sent :",PlayingState(rnd,trn,players,apok,bnk).asJson.noSpaces)
+          connectedPlayers.foreach(l =>
+            {
+              val obfuscated = ObfuscateDeckForPlayer(l, PlayingState(rnd, trn, players, apok, bnk))
+              val dataToSend = AddTypeToJson(obfuscated.asJson,"playingState").noSpaces
+              ctx.log.warn(dataToSend.toString())
+              connections(l) ! dataToSend
+            })
+          ctx.log.info("Sent :" + PlayingState(rnd,trn,players, apok,bnk).asJson.noSpaces)
           Behaviors.same
         case GameEnded(players,apok,bnk,thr) =>
           val connectedPlayers = players.flatMap((l, d) => if (connections.contains(l)) then Some(l) else None)
-          connectedPlayers.foreach(l => connections(l) ! GameEnded(players,apok,bnk,thr).asJson.noSpaces)
-          ctx.log.info("Sent :",GameEnded(players,apok,bnk,thr).asJson.noSpaces)
+          val dataToSend = AddTypeToJson(GameEnded(players,apok,bnk,thr).asJson,"gameEnded").noSpaces
+          connectedPlayers.foreach(l => connections(l) ! dataToSend)
+          ctx.log.info("Sent :" + dataToSend)
           Behaviors.same
         case VotingState(playersAndVotes,rnd,apok,bnk) =>
           val connectedPlayers = playersAndVotes.flatMap((l, o,d) => if (connections.contains(l)) then Some(l) else None)
-          connectedPlayers.foreach(l => connections(l) ! VotingState(playersAndVotes,rnd,apok,bnk).asJson.noSpaces)
-          ctx.log.info("Sent :",VotingState(playersAndVotes,rnd,apok,bnk).asJson.noSpaces)
+          val dataToSend = AddTypeToJson(VotingState(playersAndVotes,rnd,apok,bnk).asJson,"votingState").noSpaces
+          connectedPlayers.foreach(l => connections(l) ! dataToSend)
+          ctx.log.info("Sent :"+ dataToSend)
           Behaviors.same
 
 
   }
 }
 
-def ObfuscateDeckForPlayer(id:String,state:GameState) : Option[PlayingState] = {
+def ObfuscateDeckForPlayer(uId:String,state:GameState) : Option[PlayingState] = {
   def DeleteCardIfNotRevealed(cards : Seq[(Card,Boolean)]) : Seq[(Card,Boolean)] = {
     cards.filter((c,b) => b).map((c,b) => (c,true))
   }
   state match
     case PlayingState(rnd,trn,players,apok,bnk)=>
-      val newPlayers = players.map((id,cards) => (id,DeleteCardIfNotRevealed(cards)))
-      Some(PlayingState(rnd,trn,newPlayers,apok,bnk))
+      val newPlayers = players.map((id,cards) => if(id == uId) then  (id,cards) else (id,DeleteCardIfNotRevealed(cards)))
+      val newBnk = DeleteCardIfNotRevealed(bnk)
+      Some(PlayingState(rnd,trn,newPlayers,apok,newBnk))
     case _ => None
+}
+
+def AddTypeToJson(json:Json,typeMark:String) : Json = {
+  val value = typeMark.asJson
+  val newField = Json.obj("type" -> value)
+  json.deepMerge(newField)
 }

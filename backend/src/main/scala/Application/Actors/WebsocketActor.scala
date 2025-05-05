@@ -65,15 +65,6 @@ def JsonToWebsocketCommand(data:Json): Option[WebsocketCommand] = {
 
 
   def parseReserveConnection(cursor: HCursor): Either[io.circe.DecodingFailure, ReserveNewConnection] = {
-   /* val gId = cursor.downField("data").downField("id").as[String].map(_.toLong)
-    val sId = cursor.downField("data").downField("sessionId").as[BigInt].map(_.toLong)
-    gId match
-      case Left(value) => Left(value)
-      case Right(gId) =>
-        sId match
-          case Left(value) => Left(value)
-          case Right(sId) =>
-            Right(ReserveNewConnection(gId,sId))*/
     for {
        gId <- cursor.downField("data").downField("id").as[String]
        sId <- cursor.downField("data").downField("sessionId").as[String]

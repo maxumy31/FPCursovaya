@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import styles from "./../../public/CssModules/AuthPage.module.css"
 import * as HTTP from "@/app/HTTP"
 import * as E from "fp-ts/Either";
+import * as T from "fp-ts/Task";
 import * as TE from "fp-ts/TaskEither";
 import * as IO from "fp-ts/IO";
 import * as O from "fp-ts/Option"
@@ -11,6 +12,7 @@ import { pipe } from "fp-ts/lib/function";
 import Loading from "./components/Loading";
 import { useRouter } from "next/navigation";
 import { error } from "console";
+import { GameStateMessage, parseGameStateMessage, PlayersWithReveableCards, ReveableCard } from "./gameWindow/WebsocketManipulations";
 
 const config : HTTP.HTTPConfig = {
     url: "http://localhost:9090"
@@ -34,7 +36,7 @@ const checkSessionExisting = (n : string) => HTTP.FPFetch<string>({
 })
 
 
-const IdRespToId = (data:string): O.Option<string> => {
+const getIdFromJSON = (data:string): O.Option<string> => {
     const findId = (json:any) : O.Option<string> => json["data"] && 
         json["data"]["id"] && json["errors"] == null ? O.some(json["data"]["id"]) : O.none
         
@@ -44,7 +46,7 @@ const IdRespToId = (data:string): O.Option<string> => {
     )
 }
 
-const sesIdRespToSesId = (data:string): O.Option<string> => {
+const getSessionIdFromJson = (data:string): O.Option<string> => {
     const findId = (json:any) : O.Option<string> => json["data"] && 
         json["data"]["id"] && json["errors"] == null && json["data"] != "Session not found" ? O.some(json["data"]["id"]) : O.none
         
@@ -63,71 +65,72 @@ export default function AuthPage() {
     const router = useRouter()
 
 
-    const OnCreateNewSessionButtonClick = ():void => {
-        createNewSession(config)().then(v => {
-            setLoaded(false)
-            switch(v._tag) {
-                case "Left":
-                    console.log("No response from server")
-                    setLoaded(true)
-                    break
-                case "Right":
-                    console.log(v.right)
-                    const id = IdRespToId(v.right)
-                    switch(id._tag) {
-                        case "None":
-                            console.log("No response from server")
-                            setLoaded(true)
-                            break
-                        case "Some":
-                            const data = {
-                                "sessionId":id.value,
-                                "userId":userId,
-                            }
-                            const dataParams = new URLSearchParams({
-                                data: JSON.stringify(data)
-                            })
-                            router.push(`/gameWindow?${dataParams}`)
-                              break
-                    }
-            }
-        })
+  
 
+    const OnCreateNewSessionButtonClick = ():void => {
+        const readValue = pipe(
+            createNewSession(config),
+            T.map(eith => {
+                return pipe(
+                    eith,
+                    O.fromEither
+                )
+            }),
+        )
+        readValue().then(sessionIdOpt => {
+            pipe(
+                sessionIdOpt,
+                O.chain(getSessionIdFromJson),
+                O.map(sessionId => {
+                    const data = {
+                        "sessionId":sessionId,
+                        "userId":userId,
+                    }
+                    const dataParams = new URLSearchParams({
+                        data: JSON.stringify(data)
+                    })
+                    console.log("data :",data)
+                    router.push(`/gameWindow?${dataParams}`)
+                })
+            )
+        })
         
     }
 
     const OnEnterExistingSessionClick = ():void => {
-        if(!sessionIdInputRef.current) {
-            return
-        }
-        const sessionId = sessionIdInputRef.current.value
-        checkSessionExisting(sessionId)(config)().then(v => {
-            setLoaded(false)
-            switch(v._tag) {
-                case "Left":
-                    setLoaded(true)
-                    break
-                case "Right":
-                    console.log(v.right)
-                    const id = IdRespToId(v.right)
-                    switch(id._tag) {
-                        case "None":
-                            setErrorMessage("Сессия не найдена.")
-                            setLoaded(false)
-                            break
-                        case "Some":
-                            const data = {
-                                "sessionId":sessionId,
-                                "userId":id.value,
+        const a = pipe(
+            sessionIdInputRef.current,
+            O.fromNullable,
+            O.map(input => {return input.value}),
+            O.map(
+                sessionId => {
+                    const b = pipe(
+                        checkSessionExisting(sessionId)(config),
+                        TE.map(
+                            (resp:string) => {
+                                const idOpt = getIdFromJSON(resp)
+                                pipe(
+                                    idOpt,
+                                    O.map(id => {
+                                        const data = {
+                                            "sessionId":sessionId,
+                                            "userId":userId,
+                                        }
+                                        const dataParams = new URLSearchParams({
+                                            data: JSON.stringify(data)
+                                        })
+                                        console.log("Loggint with :",data)
+                                        router.push(`/gameWindow?${dataParams}`)
+                                    })
+                                    
+                                )
                             }
-                            const dataParams = new URLSearchParams({
-                                data: JSON.stringify(data)
-                            })
-                            router.push(`/gameWindow?${dataParams}`)
-                            break
-                    }
-            }
-        })
+                        )
+                    )
+                    b()
+                }
+            )
+        )
     }
 
     
@@ -138,7 +141,7 @@ export default function AuthPage() {
                     console.log("No response from server.")
                     break
                 case "Right":
-                    const id = (IdRespToId(v.right))
+                    const id = (getIdFromJSON(v.right))
                     switch(id._tag) {
                         case "None":
                             console.log("Wrong response from server.")

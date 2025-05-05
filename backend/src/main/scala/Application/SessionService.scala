@@ -58,7 +58,11 @@ object SessionService extends ISessionService{
   def AddPlayerService(state: GameState, id: String): GameState = {
     state match
       case WaitingState(lobby) =>
-        WaitingState(lobby.appended(id))
+        if(lobby.contains(id)) {
+          state
+        } else {
+          WaitingState(lobby.appended(id))
+        }
       case _ => state
   }
 
@@ -243,6 +247,7 @@ object SessionService extends ISessionService{
                 PrepareBunkerCards(shuffledDeck,5).map(c => (c,false)))
             } else state
           case None => state
+      case _ => state
   }
 
   override def apply(state: GameState, command: SessionCommand): GameState = ???

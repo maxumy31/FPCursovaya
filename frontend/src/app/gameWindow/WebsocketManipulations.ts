@@ -1,4 +1,4 @@
-import {GameState,UserConnectionData, PageState, ParseUserDataAction} from "@/app/gameWindow/GamePageMonadReducer"
+
 import { eitherT, readonlyArray, state } from 'fp-ts';
 import { useRef, useEffect, useMemo, useState, JSX, useReducer } from 'react'
 import { pipe } from 'fp-ts/function';
@@ -12,7 +12,7 @@ import * as O from "fp-ts/lib/Option"
 import { Task } from 'fp-ts/lib/Task';
 import { map } from 'fp-ts/lib/EitherT';
 import * as S from 'fp-ts/lib/State';
-import { useStateMonad } from './StateMonadHook';
+import { error } from 'console';
 
 
 
@@ -29,7 +29,7 @@ export type WebsocketCommands =
   data : {
     "id":string,
     "sessionId":string,
-    "cardId":string,
+    "cardId":number,
   }
 } | 
  {
@@ -43,47 +43,186 @@ export type WebsocketCommands =
   "operationType":"voteFor",
   data : {
     "id":string,
-    "votingForId":string,
+    "targetId":string,
+    "sessionId":string
+  }
+} |
+{
+  "operationType":"voteFor",
+  "data" : {
+    "id":string,
+    "sessionId":string
   }
 } 
 
+type CardType = 
+  | "Profession" 
+  | "Biology" 
+  | "Health" 
+  | "Hobby" 
+  | "Item" 
+  | "Fact" 
+  | "Apokalipsis" 
+  | "Bunker";
 
+export type PlayersWithReveableCards = {
+  "id":string,
+  "cards":ReveableCard[]
+}
 
+export type ReveableCard = {
+  "cardType":string,
+  "description":string,
+  "isRevealed":boolean
+}
 
+export type GameStateMessage = {
+  "type":"waitingState",
+  "players":string[]
+} | {
+  "type":"playingState",
+  "round":number,
+  "turn":number,
+  "players":PlayersWithReveableCards[],
+  "apokalipsis":ReveableCard,
+  "bunkerCards":ReveableCard[]
+}
 
-
-  export const SendCommand = (command: WebsocketCommands, client : WS.WebSocketClient):TE.TaskEither<string,void> => {
-    console.log("sending")
-    return client.Send(JSON.stringify(command))
+export const PrepareConnectionMessage = (userId:string,sessionId:string):WebsocketCommands => {
+  return {
+    "operationType":"reserveNewConnection",
+    "data" : {
+      "id":userId,
+      "sessionId":sessionId,
+    }
   }
+}
 
+export const PrepareRevealCardMessage = (userId:string,cardId:number,sessionId:string):WebsocketCommands => {
+  return {
+    "operationType":"makeMove",
+    "data" : {
+      "id":userId,
+      "sessionId":sessionId,
+      "cardId":cardId,
+    }
+  }
+}
 
-  
+export const PrepareStartGameMessage = (userId:string,sessionId:string):WebsocketCommands => {
+  return  {
+    "operationType":"startGame",
+    "data" : {
+      "id":userId,
+      "sessionId":sessionId,
+    }
+  }
+}
 
-  export const EstablishConnection = (clientPromise : TE.TaskEither<string,WS.WebSocketClient>, 
-    userData : O.Option<UserConnectionData>): TE.TaskEither<string,void>  => {
+export const PrepareVotingMessage = (userId:string,sessionId:string,targetId:string):WebsocketCommands => {
+  return   {
+    "operationType":"voteFor",
+    data : {
+      "id":userId,
+      "targetId":targetId,
+      "sessionId":sessionId
+    }
+  } 
+}
 
-      const TryConnectToSession = (userParams : UserConnectionData, client : WS.WebSocketClient):TE.TaskEither<string,void> => {
-        const connectionMessage : WebsocketCommands = {
-          operationType:"reserveNewConnection",
-          data : {
-            "id": String(userParams.userId),
-            "sessionId" : String(userParams.sessionId)
+export const PrepareLeavingMessage = (userId:string,sessionId:string):WebsocketCommands => {
+  return  {
+    "operationType":"voteFor",
+    "data" : {
+      "id":userId,
+      "sessionId":sessionId
+    }
+  } 
+}
+
+export const ParseMessage = (message:any):O.Option<GameStateMessage> => {
+  return O.tryCatch(
+    () => {
+      const json = JSON.parse(message)
+      const msgType:string = json["type"]
+      switch(msgType) {
+        case "waitingState":
+          const players : string[] = json["players"]!
+          const waitingState : GameStateMessage = {
+            "type":msgType,
+            "players":players
           }
-        }
-        return SendCommand(connectionMessage,client)
+          return waitingState
+          case "playingState":
+            const a = parseGameStateMessage(json)
+            console.log(a)
+            return a
       }
+      throw new Error("Cannot parse")
+    }
+  )
+}
 
-      const userDataEither = E.fromOption(() => "UserData is missing")(userData)
 
-      return pipe(
-        clientPromise,
-        TE.chain(client => 
-          pipe(
-            userDataEither,
-            TE.fromEither,
-            TE.chain(userParams => TryConnectToSession(userParams,client))
-          )
-        )
-      )
+
+
+
+export function parseGameStateMessage(json: any): GameStateMessage {
+  // Валидация базовой структуры
+  if (typeof json !== "object" || json === null) {
+    throw new Error("Invalid JSON structure");
   }
+
+  // Парсинг карт с флагом раскрытия
+  const parseReveableCard = (cardData: any): ReveableCard => {
+    if (!Array.isArray(cardData) || cardData.length !== 2) {
+      throw new Error("Invalid card format");
+    }
+    
+    const [card, isRevealed] = cardData;
+    const cardTypeKey = Object.keys(card.cardType)[0];
+  
+    return {
+      cardType: cardTypeKey as CardType,
+      description: card.description,
+      isRevealed: Boolean(isRevealed)
+    };
+  };
+
+  // Парсинг игроков
+  const parsePlayers = (playersData: any[]): PlayersWithReveableCards[] => {
+    return playersData.map(playerData => {
+      if (!Array.isArray(playerData) || playerData.length !== 2) {
+        throw new Error("Invalid player format");
+      }
+      
+      const [id, cardsData] = playerData;
+      return {
+        id: String(id),
+        cards: (cardsData as any[]).map(parseReveableCard)
+      };
+    });
+  };
+
+  // Парсинг бункерных карт
+  const parseBunkerCards = (cardsData: any[]): ReveableCard[] => {
+    return cardsData.map(cardData => ({
+      ...parseReveableCard(cardData),
+      // Для бункерных карт принудительно выставляем тип
+      cardType: "Bunker"
+    }));
+  };
+
+  // Основной парсинг
+  return {
+    type: "playingState",
+    round: Number(json.round),
+    turn: Number(json.turn),
+    players: parsePlayers(json.players),
+    apokalipsis: {
+      ...parseReveableCard([json.apokalipsisCard, true]), // Предполагаем что апокалипсис всегда раскрыт
+      cardType: "Apokalipsis"
+    },
+    bunkerCards: parseBunkerCards(json.bunkerCards)
+  };
+}
