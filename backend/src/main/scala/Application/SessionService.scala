@@ -2,6 +2,7 @@ package Application
 
 import Application.Actors.*
 import Domain.*
+import Domain.CardType.{Apokalipsis, Bunker, Profession}
 
 
 
@@ -62,7 +63,7 @@ object SessionService extends ISessionService{
   }
 
   def TransferNextState(state: GameState): GameState = {
-    def mostFrequent(items: Seq[String]): Seq[String] = {
+    def MostFrequent(items: Seq[String]): Seq[String] = {
       if (items.isEmpty) return Seq.empty
 
       val frequencyMap = items.groupBy(identity).view.mapValues(_.size)
@@ -73,47 +74,66 @@ object SessionService extends ISessionService{
         .toSeq
         .sorted
     }
+
+    def RevealFirstUnrevealedCard(cards: Seq[(Card, Boolean)]): Seq[(Card, Boolean)] = {
+      val unrevealedIndex = cards.indexWhere(!_._2)
+      if (unrevealedIndex == -1) then cards else {
+        val (before, after) = cards.splitAt(unrevealedIndex)
+        val updatedCard = (after.head._1, true)
+        before ++ (updatedCard +: after.tail)
+      }
+    }
+
+    def RevealAllDeck(cards : Seq[(Card,Boolean)]) : Seq[Card] = cards.map((c,b) => c)
     
     state match {
       case WaitingState(lobby) => WaitingState(lobby)
-      case VotingState(playersAndVotes,rnd) =>
-        if(rnd == LastRound) then {
-          GameEnded(playersAndVotes.map((l,o,d) => (l,d)))
-        }
+      case VotingState(playersAndVotes,rnd,apok,bunker) =>
         val voted = playersAndVotes.map((id,voteOpt,deck) => {
           voteOpt match
             case Some(vote) => 1
             case None => 0
         }).sum
-        if (voted == playersAndVotes.length) then {
-          val votes = playersAndVotes.map((id,voteOpt,deck) => {
-            voteOpt match
-              case Some(vote) => vote
-          })
-          val toKick = mostFrequent(votes).head
-          val newPlayers = playersAndVotes.filter((l,o,d) => l != toKick).map((l,o,d) => (l,d))
-          PlayingState(rnd,0,newPlayers)
-        } else {
-          VotingState(playersAndVotes,rnd)
-        }
-      case GameEnded(winners) => 
-        GameEnded(winners)
-
-      case PlayingState(rnd, trn, players) =>
-        if(trn >= players.length) {
-          def transit(l:String,d:Deck) : (String,Option[String],Deck) = {
-            (l,None,d)
+        if(voted == playersAndVotes.length) {
+          if (rnd == LastRound) then {
+            GameEnded(playersAndVotes.map((l, o, d) => (l,RevealAllDeck(d))),
+              apok,bunker,Seq())
           }
-          VotingState(players.map(transit),rnd)
+
+          if (voted == playersAndVotes.length) then {
+            val votes = playersAndVotes.map((id, voteOpt, deck) => {
+              voteOpt match
+                case Some(vote) => vote
+            })
+            val toKick = MostFrequent(votes).head
+            val newPlayers = playersAndVotes.filter((l, o, d) => l != toKick).map((l, o, d) => (l, d))
+            val newBunker = RevealFirstUnrevealedCard(bunker)
+            PlayingState(rnd, 0, newPlayers, apok, newBunker)
+          } else {
+            VotingState(playersAndVotes, rnd, apok, bunker)
+          }
         } else {
-          PlayingState(rnd,trn,players)
+          VotingState(playersAndVotes,rnd,apok,bunker)
+        }
+
+      case GameEnded(winners,apok,bunker,threats) =>
+        GameEnded(winners,apok,bunker,threats)
+
+      case PlayingState(rnd, trn, players,apok,bunker) =>
+        if(trn >= players.length) {
+          def transit(l:String,s:Seq[(Card,Boolean)]) : (String,Option[String],Seq[(Card,Boolean)]) = {
+            (l,None,s)
+          }
+          VotingState(players.map(transit),rnd,apok,bunker)
+        } else {
+          PlayingState(rnd,trn,players,apok,bunker)
         }
     }
   }
 
   def VotePlayer(state:GameState, target:String, from : String) : GameState = {
     state match
-      case VotingState(playersAndVotes,rnd) =>
+      case VotingState(playersAndVotes,rnd,apok,bunker) =>
         if(playersAndVotes.exists((l, o, d) => l == target)) {
           val host = playersAndVotes.find((l, o, d) => l == from)
           val newVotes = playersAndVotes.map(
@@ -122,9 +142,9 @@ object SessionService extends ISessionService{
             } else {
               (l, o, d)
             })
-          VotingState(newVotes,rnd)
+          VotingState(newVotes,rnd,apok,bunker)
         } else {
-          VotingState(playersAndVotes,rnd)
+          VotingState(playersAndVotes,rnd,apok,bunker)
         }
       case _ => state
 
@@ -132,21 +152,32 @@ object SessionService extends ISessionService{
 
   def RevealCard(state:GameState, card:Int, id:String) : GameState = {
     state match
-      case PlayingState(rnd,trn,players) =>
+      case PlayingState(rnd,trn,players,apok,bunker) =>
         val host = players.find((l,d) => l == id)
         host match
-          case Some(_,deck) =>
-            val maxIndex = deck.cards.length-1
+          case Some(pId,cards) =>
+            val maxIndex = cards.length-1
             if(card > maxIndex) {
               state
             } else {
-              val newDeck = Deck(deck.cards,
-                deck.revealed.zipWithIndex.map(
-                  (b,i) => if(i == card) then {true} else {b}))
-              val newPlayers = players.map((plId,plDeck) => {
-                if(plId == id) then (plId,newDeck) else (plId,plDeck)
+              val newCards = cards.zipWithIndex.map((data) => {
+                if(data._2 == card) then {
+                  (data._1._1,true)
+                } else {
+                  (data._1._1,data._1._2)
+                }
               })
-              PlayingState(rnd,trn,players)
+              val newPlayers = players.map(
+                playerData => {
+                  if(playerData._1 == pId) {
+                    (pId,newCards)
+                  } else {
+                    (playerData)
+                  }
+                }
+              )
+
+              PlayingState(rnd,trn,newPlayers,apok,bunker)
             }
           case None => state
       case _ => state
@@ -154,23 +185,48 @@ object SessionService extends ISessionService{
 
   def DeletePlayerService(state:GameState, whoToDelete:String) : GameState = {
     state match
-      case VotingState(playersAndVotes,rnd) =>
+      case VotingState(playersAndVotes,rnd,apok,bunker) =>
         val newPlayers = playersAndVotes.flatMap((l,o,d) => if(l == whoToDelete) then None else Some(l,o,d))
-        VotingState(newPlayers,rnd)
-      case PlayingState(_,_,_) => state
-      case GameEnded(_) => state
+        VotingState(newPlayers,rnd,apok,bunker)
+      case PlayingState(_,_,_,_,_) => state
+      case GameEnded(_,_,_,_) => state
       case WaitingState(players) =>
         WaitingState(players.flatMap(l => if( l == whoToDelete) then None else Some(l)))
   }
 
   def StartGame(state:GameState, initiator : String) : GameState = {
-    def GenerateDeckForPlayer(deck : Deck,left:Int) : Seq[Deck] = {
+    def GenerateDeckForPlayer(deck : Deck,left:Int) : Seq[Seq[Card]] = {
       val (set,newDeck) = GeneratePlayerSet(deck)
       if(left <= 0) {
-        Seq(Deck(set,set.map(c => false)))
+        Seq(set)
       } else {
-        GenerateDeckForPlayer(newDeck,left-1) ++ Seq(Deck(set,set.map(c => false)))
+        GenerateDeckForPlayer(newDeck,left-1) ++ Seq(set)
       }
+    }
+
+    def PrepareBunkerCards(deck:Deck,count:Int) : Seq[Card] = {
+      val (card,newDeck) = TakeFirstCardOfType(deck,Bunker)
+      if(count <= 0) then {
+          card match
+            case Some(c) => Seq(c)
+            case None => Seq()
+        } else {
+          card match
+            case Some(c) => Seq(c) ++ PrepareBunkerCards(newDeck,count)
+            case None => Seq()
+        }
+    }
+
+    def RevealTypeCard(seq : Seq[Card],t : CardType) : Seq[(Card,Boolean)] = {
+      seq.map(
+        c => {
+          if(c.cardType == t) {
+            (c,true)
+          } else {
+            (c,false)
+          }
+        }
+      )
     }
 
     state match
@@ -181,7 +237,10 @@ object SessionService extends ISessionService{
               val deck = TestDeck()
               val shuffledDeck = ShuffleDeck(deck,42)
               val playersDecks = GenerateDeckForPlayer(shuffledDeck,players.length)
-              PlayingState(0,0,players.zip(playersDecks))
+              val apokalipsisCard = TakeFirstCardOfType(deck,Apokalipsis)._1.get
+              val zippedCards = players.zip(playersDecks).map((id,card) => (id,RevealTypeCard(card,Profession)))
+              PlayingState(1,0,zippedCards,apokalipsisCard,
+                PrepareBunkerCards(shuffledDeck,5).map(c => (c,false)))
             } else state
           case None => state
   }

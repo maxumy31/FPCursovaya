@@ -141,7 +141,9 @@ def NewWebsocketFlow(actor:ActorSystem[MainRequest]):Flow[Message, Message, Any]
           case Right(value) =>
             JsonToWebsocketCommand(value) match
               case Some(cmd) => system ! WebsocketMessageProxy(adapter, cmd)
-              case None => println("No commands")
+              case None =>
+                println("No commands")
+                println(value)
 
       }),
 

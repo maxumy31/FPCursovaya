@@ -2,7 +2,7 @@ package Domain
 
 import Domain.CardType.*
 
-case class Deck(cards:Seq[Card], revealed:Seq[Boolean])
+case class Deck(cards:Seq[Card])
 
 object TestDeck {
   def apply(): Deck = {
@@ -64,9 +64,6 @@ object TestDeck {
     val allCards = professionCards ++ biologyCards ++ healthCards ++ hobbyCards ++
       itemCards ++ factCards ++ specialCards ++ apocalypseCards ++ bunkerCards ++ threatCards
 
-    Deck(
-      cards = allCards,
-      revealed = Vector.fill(100)(false)
-    )
+    Deck(allCards)
   }
 }

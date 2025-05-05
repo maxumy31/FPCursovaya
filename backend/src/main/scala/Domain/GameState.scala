@@ -5,7 +5,9 @@ package Domain
 case class PlayingState(
                       round:Int,
                       turn:Int,
-                      players : Seq[(String,Deck)]
+                      players : Seq[(String,Seq[(Card,Boolean)])],
+                      apokalipsisCard: Card,
+                      bunkerCards : Seq[(Card,Boolean)]
                     )
 
 case class WaitingState(
@@ -13,13 +15,22 @@ case class WaitingState(
                          )
 
 case class VotingState(
-                 playersAndVotes : Seq[(String,Option[String],Deck)],
-                 turn : Int
+                      //Пояснение к playersAndVotes
+                      //Первая строка - айди
+                      //Option[String] - голоса(на каждом итом месте голос итого игрока против игрока k итое)
+                      //Seq[Card] - набор карт игрока
+                 playersAndVotes : Seq[(String,Option[String],Seq[(Card,Boolean)])],
+                 turn : Int,
+                 apokalipsisCard: Card,
+                 bunkerCards : Seq[(Card,Boolean)]
                  )
 
 
 case class GameEnded(
-                    winners: Seq[(String,Deck)]
+                    winners: Seq[(String,Seq[Card])],
+                    apokalipsisCard: Card,
+                    bunkerCards : Seq[(Card,Boolean)],
+                    threats : Seq[Card]
 )
 
 type GameState = PlayingState | WaitingState | VotingState | GameEnded
