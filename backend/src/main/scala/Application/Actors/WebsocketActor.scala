@@ -87,10 +87,11 @@ def JsonToWebsocketCommand(data:Json): Option[WebsocketCommand] = {
   }
 
   def parseRevealCardCommand(cursor: HCursor): Either[io.circe.DecodingFailure, RevealCardWSCommand] = {
+    val dataCursor = cursor.downField("data")
     for {
-      init <- cursor.downField("data").downField("id").as[String]
-      sId <- cursor.downField("data").downField("sessionId").as[String]
-      cId <- cursor.downField("data").downField("cardId").as[Int]
+      init <- dataCursor.downField("id").as[String]
+      sId  <- dataCursor.downField("sessionId").as[String]
+      cId  <- dataCursor.downField("cardId").as[Int]
     } yield RevealCardWSCommand(sId, cId, init)
   }
 
@@ -114,6 +115,7 @@ def JsonToWebsocketCommand(data:Json): Option[WebsocketCommand] = {
         ("closeConnection",parseLeaveGameCommand)
       )
       println(dispatcher.contains(operationString))
+
 
       dispatcher.find(_._1 == operationString) match
         case None => None

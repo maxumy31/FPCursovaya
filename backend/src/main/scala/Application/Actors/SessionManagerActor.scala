@@ -50,7 +50,6 @@ object SessionManagerActor  {
             case None => replyTo ! SessionNotFoundResponse
           Behaviors.same
 
-        case Application.Actors.DeleteSession(_, _) => ???
         case SessionCommandProxy(id,cmd) =>
           val contains = map.contains(id)
           if(contains)  {

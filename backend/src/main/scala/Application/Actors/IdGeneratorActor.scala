@@ -2,12 +2,14 @@ package Application.Actors
 
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
+import cats.data.Reader
 
 import java.nio.charset.StandardCharsets
 import java.nio.ByteBuffer
+import java.time.LocalDateTime
 import java.util.Base64
 import scala.annotation.tailrec
-import scala.collection.immutable.HashSet
+import scala.collection.immutable.{HashMap, HashSet}
 
 trait IdGeneratorCommand
 case class GenerateId(from: ActorRef[IdGenerated]) extends IdGeneratorCommand
@@ -15,19 +17,19 @@ case class ForgetId(id:String) extends IdGeneratorCommand
 case class IdGenerated(data:String)
 
 object IdGeneratorActor {
-  def apply(a:Long,b:Long,c:Long)(used:HashSet[String],last:Long): Behavior[IdGeneratorCommand] =
+  val LifeTimeInHours = 24
+  val readTime: Reader[Unit, LocalDateTime] = Reader(_ => LocalDateTime.now())
+  def apply(a:Long,b:Long,c:Long)(used:HashMap[String,LocalDateTime], last:Long): Behavior[IdGeneratorCommand] =
   Behaviors.receive {(ctx,msg) => {
     val LongGenerator = GenerateLong(a,b,c)
     msg match
       case GenerateId(from) =>
-        val (id,newSeed) = GenerateUniqueString(used,last,LongGenerator)
+        val currentTime = readTime.run(())
+        val (id,newSeed) = GenerateUniqueString(used,last,LongGenerator,currentTime)
+        val expireTime = currentTime.plusHours(LifeTimeInHours)
         from ! IdGenerated(id)
         ctx.log.info(s"Generated id $id")
-        this(a, b, c)(used.incl(id), newSeed)
-
-      case ForgetId(id) =>
-        ctx.log.info(s"Deleting id $id")
-        this(a, b, c)(used.excl(id), last)
+        this(a, b, c)(used + (id -> expireTime), newSeed)
   }}
 }
 
@@ -43,16 +45,16 @@ def LongsToString(a:Long,b:Long):String = {
   encoder.encodeToString(bytes.array())
 }
 @tailrec
-def GenerateUniqueString(used:HashSet[String], seed:Long, genLong : Long => Long):(String,Long) = {
+def GenerateUniqueString(used:HashMap[String,LocalDateTime], seed:Long, genLong : Long => Long, currentTime : LocalDateTime):(String,Long) = {
   def GenerateString(seed:Long): (String,Long) = {
     val next1 = genLong(seed)
     val next2 = genLong(next1)
     (LongsToString(next1, next2),next2)
   }
-  val (newString, nextSeed) = GenerateString(seed)
-  if(used.contains(newString)) {
-    GenerateUniqueString(used,genLong.andThen(genLong)(seed),genLong)
+  val (id,newSeed) = GenerateString(seed)
+  if(used.contains(id) && used(id).isAfter(currentTime)) {
+    GenerateUniqueString(used,newSeed,genLong,currentTime)
   } else {
-    (newString,nextSeed)
+    (id,newSeed)
   }
 }

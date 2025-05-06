@@ -27,6 +27,7 @@ export type UserConnectionData = {
   userId:string,
 }
 
+//Парсим параметры из строки
 const ParseParams = (params:ReadonlyURLSearchParams | null) : O.Option<UserConnectionData> => {
     return pipe(
       params,
@@ -43,6 +44,8 @@ const ParseParams = (params:ReadonlyURLSearchParams | null) : O.Option<UserConne
       )
   }
 
+  //Из параметров подключения создаем начальную страницу. Если они есть, то пишем что подключение
+  //Если нету, то пишем что ошибка
   const ParamsToInitialState = (conData : O.Option<UserConnectionData>): GameState => {
     const state:O.Option<GameState> =  pipe(
       conData,
@@ -72,8 +75,11 @@ export default function GameWindows(){
   const params = useSearchParams()
   const parsedParams = ParseParams(params)
 
-  //Если есть куда конектится, то пытаемся. Если нет, то забиваем
+  //Главный элемент управления состоянием страницы. Функция Reduce обрабатывает все вызовы
+  //к actionReducer и изменяет состояние currentState, за счет чего происходит ререндер
+  //ParamsToInitialState(parsedParams) - начальное состояние
   const [currentState,actionReducer] = useReducer(Reduce,ParamsToInitialState(parsedParams))
+  
 
   const ConnectWS = (URL:string,parsedParams:O.Option<UserConnectionData>) => {
     //Пытаемся законектится
@@ -146,32 +152,22 @@ export default function GameWindows(){
           ParseMessage(msg),
           O.map((gsm) => {
             console.log("gsm :",gsm)
-            switch(gsm.type) {
-              case "waitingState":
-                const newAction :GameAction = {
-                  type:"UpdateCurrentState",
-                  data:gsm
-                }
-                console.log(newAction,"update action")
-                actionReducer(newAction)
-                break
-                case "playingState":
-                  actionReducer({
-                    type:"UpdateCurrentState",
-                    data:gsm
-                  })
+            const newAction :GameAction = {
+              type:"UpdateCurrentState",
+              data:gsm
             }
+            actionReducer(newAction)
+            PollMessages(ws)
           })
         )
         
       }),
     )
     a()
-    if(currentState.type === "GameState") {
-      setTimeout(() => PollMessages(ws),2000)
-    }
+
   }
 
+  //Вызывается при изменении currentState
   useEffect(() => {
     switch(currentState.type)
     {

@@ -77,9 +77,6 @@ def NewRestRoutes(actor: ActorSystem[MainRequest]) : Route = {
         }
       } ~
       path("session" / Remaining) { id => {
-        delete {
-          complete(s"session $id must be deleted")
-        } ~
           get {
             println(id)
             val operation : Future[SessionManagerResponse] = actor.ask(replyTo =>
@@ -110,7 +107,6 @@ def NewRestRoutes(actor: ActorSystem[MainRequest]) : Route = {
 def adapterBehavior(queue: SourceQueueWithComplete[Message]): Behavior[String] =
   Behaviors.setup { context =>
     Behaviors.receiveMessage { msg =>
-      println("output : " + msg)
       queue.offer(TextMessage.Strict(msg))
       Behaviors.same
     }
@@ -127,7 +123,6 @@ def NewWebsocketFlow(actor:ActorSystem[MainRequest]):Flow[Message, Message, Any]
     .preMaterialize()
   
   val adapter = actor.systemActorOf(adapterBehavior(queue), "websocket-adapter" + java.util.UUID.randomUUID())
-  println("Websocket connection established")
   Flow.fromSinkAndSource(
     Flow[Message]
       .collect {
@@ -137,13 +132,11 @@ def NewWebsocketFlow(actor:ActorSystem[MainRequest]):Flow[Message, Message, Any]
       .to(Sink.foreach { text =>
         println(text)
         parse(text) match
-          case Left(err) => println("Wrong parsed")
+          case Left(err) => 
           case Right(value) =>
             JsonToWebsocketCommand(value) match
               case Some(cmd) => system ! WebsocketMessageProxy(adapter, cmd)
               case None =>
-                println("No commands")
-                println(value)
 
       }),
 

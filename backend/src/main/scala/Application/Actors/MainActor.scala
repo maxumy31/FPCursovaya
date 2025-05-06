@@ -33,11 +33,11 @@ object MainActor {
     //MMIX by Donald Knuth
     //Брал волшебные цифры оттуда
     val GuestIdGenerator = setupCtx.spawn(IdGeneratorActor(6364136223846793005L,1442695040888963407L,Long.MaxValue)
-      (HashSet(),0),"GuestIDGenerator")
+      (HashMap(),0),"GuestIDGenerator")
 
     val SessionManager : ActorRef[SessionManagerCommand | SessionCommand] = setupCtx.spawn( Behaviors.setup{ctx => {
       val SessionIdGenerator = ctx.spawn(IdGeneratorActor(6364136223846793005L,1442695040888963407L,Long.MaxValue)
-        (HashSet(),0),"SessionIdGenerator")
+        (HashMap(),0),"SessionIdGenerator")
       SessionManagerActor(SessionIdGenerator)(HashMap())
     }},"SessionManager")
 

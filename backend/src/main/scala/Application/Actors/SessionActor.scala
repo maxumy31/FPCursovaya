@@ -37,8 +37,31 @@ object SessionActor {
             ntf ! NotifyWith(nextState)
             this(nextState)(sessionService)
           case VoteForPlayer(ntf,trg,init) =>
-            val nextState = sessionService.TransferNextState(sessionService.VotePlayer(state, trg,init))
+            val stateBefore = state
+            val stateAfterVoting = sessionService.VotePlayer(state, trg,init)
+            val stateAfter = stateAfterVoting
+            val nextState = sessionService.TransferNextState(stateAfterVoting)
+            val lostPlayer = GetLostPlayer(GetPlayers(stateBefore),GetPlayers(nextState))
+            ctx.log.error(lostPlayer.toString)
+            lostPlayer match
+              case Some(pl) => ntf ! PlayerKicked(pl)
+              case None =>
             ntf ! NotifyWith(nextState)
             this (nextState)(sessionService)
       }}
+}
+
+def GetLostPlayer(before:Seq[String], after:Seq[String]) : Option[String] = {
+      val beforeSet = before.toSet
+      val afterSet = after.toSet
+      println(beforeSet.toString + afterSet.toString)
+      val lostPlayers = beforeSet -- afterSet
+      lostPlayers.headOption
+}
+
+def GetPlayers(state:GameState) : Seq[String] = {
+  state match
+    case VotingState(pl,_,_,_) => pl.map((l) => l._1)
+    case PlayingState(_,_,pl,_,_) => pl.map((l) => l._1)
+    case _ => Seq()
 }

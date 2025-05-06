@@ -12,7 +12,7 @@ import { pipe } from "fp-ts/lib/function";
 import Loading from "./components/Loading";
 import { useRouter } from "next/navigation";
 import { error } from "console";
-import { GameStateMessage, parseGameStateMessage, PlayersWithReveableCards, ReveableCard } from "./gameWindow/WebsocketManipulations";
+import { GameStateMessage, parseEndState, parseGameStateMessage, PlayersWithReveableCards, ReveableCard, transformToVotingsState } from "./gameWindow/WebsocketManipulations";
 
 const config : HTTP.HTTPConfig = {
     url: "http://localhost:9090"
@@ -65,6 +65,7 @@ export default function AuthPage() {
     const router = useRouter()
 
 
+
   
 
     const OnCreateNewSessionButtonClick = ():void => {
@@ -98,13 +99,13 @@ export default function AuthPage() {
     }
 
     const OnEnterExistingSessionClick = ():void => {
-        const a = pipe(
+        pipe(
             sessionIdInputRef.current,
             O.fromNullable,
             O.map(input => {return input.value}),
             O.map(
                 sessionId => {
-                    const b = pipe(
+                    pipe(
                         checkSessionExisting(sessionId)(config),
                         TE.map(
                             (resp:string) => {
@@ -126,8 +127,7 @@ export default function AuthPage() {
                                 )
                             }
                         )
-                    )
-                    b()
+                    )()
                 }
             )
         )

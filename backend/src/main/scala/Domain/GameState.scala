@@ -17,7 +17,7 @@ case class WaitingState(
 case class VotingState(
                       //Пояснение к playersAndVotes
                       //Первая строка - айди
-                      //Option[String] - голоса(на каждом итом месте голос итого игрока против игрока k итое)
+                      //Option[String] - голоса(на каждом итом месте голос итого игрока против игрока k-ого)
                       //Seq[Card] - набор карт игрока
                  playersAndVotes : Seq[(String,Option[String],Seq[(Card,Boolean)])],
                  turn : Int,

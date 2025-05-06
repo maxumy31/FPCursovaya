@@ -5,16 +5,16 @@
       "static/chunks/main-app.js",
       "static/chunks/app/layout.js"
     ],
-    "/gameWindow/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/gameWindow/page.js"
-    ],
     "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/page.css",
       "static/chunks/app/page.js"
+    ],
+    "/gameWindow/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/gameWindow/page.js"
     ]
   }
 }

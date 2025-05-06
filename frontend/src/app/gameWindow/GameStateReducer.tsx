@@ -4,6 +4,8 @@ import {UserConnectionData} from "./page"
 import WaitingPageState from "./PageStates/WaitingPageState"
 import {GameStateMessage, PlayersWithReveableCards} from "./WebsocketManipulations"
 import PlayingPageState from "./PageStates/PlayingPageState"
+import VotingPageState from "./PageStates/VotingPageState"
+import GameEndedState from "./PageStates/GameEndedState"
 
 export type GameAction =  {
     type:"ConnectedWS"
@@ -44,7 +46,7 @@ export type GameState =
     data: GameStateMessage
 }
 
-
+//Этот ужас обрабатывает все GameAction и мутирует состояние страницы
 export default function Reduce(currentState: GameState, action: GameAction): GameState {
     console.log("Reducer input:", currentState, action);
   
@@ -115,10 +117,45 @@ export default function Reduce(currentState: GameState, action: GameAction): Gam
                     type: "GameState",
                     data: action.data,
                     markup: PlayingPageState(
-                        action.data, currentState.connection
+                        action.data, currentState.connection, 
+                        currentState.connectionData.userId,currentState.connectionData.sessionId
                     )
                   };
-            }
+            } else if(action.data.type === "votingsState") {
+              console.log("update to voting state")
+                console.log(action.data)
+                return {
+                    connection:currentState.connection,
+                    connectionData:currentState.connectionData,
+                    type: "GameState",
+                    data: action.data,
+                    markup: VotingPageState(
+                        action.data, currentState.connection, 
+                        currentState.connectionData.userId,currentState.connectionData.sessionId
+                    )
+                  };
+            } else if(action.data.type === "playerKicked") {
+              console.log("you was kicked")
+                console.log(action.data)
+                return {
+                    connection:currentState.connection,
+                    connectionData:currentState.connectionData,
+                    type: "GameState",
+                    data: action.data,
+                    markup: <div>Вы были изгнаны</div>
+                  };
+            } else if(action.data.type === "gameEnded") {
+              console.log("you was kicked")
+                console.log(action.data)
+                return {
+                    connection:currentState.connection,
+                    connectionData:currentState.connectionData,
+                    type: "GameState",
+                    data: action.data,
+                    markup: GameEndedState(action.data,currentState.connection,
+                      currentState.connectionData.userId,currentState.connectionData.sessionId)
+                  };
+                }
           
         }
         break;

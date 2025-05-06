@@ -2,49 +2,13 @@ package Application
 
 import Application.Actors.*
 import Domain.*
-import Domain.CardType.{Apokalipsis, Bunker, Profession}
+import Domain.CardType.{Apokalipsis, Bunker, Profession, Threat}
 
 
 
-
-
-
-
-/*def StartGame(state:GameState,id:Long,deck: Deck) :GameState = {
-  def CreateDeck(times:Int,initialDeck : Deck) : Seq[Option[]]= {
-    CreatePlayerDeck(initialDeck) match {
-      
-    }
-  }
-  state match {
-    case WaitingState(lobby) => if(lobby.head == id) {
-      
-      PlayingState(0,0,players)
-    } else {
-      state
-    }
-  }
-}*/
-
-/*def DeletePlayerService(state:GameState,deleteId :Long): GameState = {
-  state match
-    case WaitingState(lobby) =>
-      WaitingState(lobby.filter(el => el != deleteId))
-    case VotingState(players, votes) =>
-      VotingState(players.filter(el => el != deleteId), votes)
-    case PlayingState(round, turn, players) =>
-      val newPlayers = players.map {
-        el => {
-          el match
-            case (l:Long,d:Deck) => if (l == deleteId) then () else (l,d)
-            case _ => ()
-        }
-      }
-      PlayingState(round, turn, newPlayers)
-}
-*/
 sealed trait ISessionService:
-  val LastRound = 5
+  val LastRound = 4
+  val MaxPlayers = 8
   def apply(state:GameState, command : SessionCommand) : GameState
   def AddPlayerService(state: GameState,id : String):GameState
   def TransferNextState(state: GameState) : GameState
@@ -58,7 +22,7 @@ object SessionService extends ISessionService{
   def AddPlayerService(state: GameState, id: String): GameState = {
     state match
       case WaitingState(lobby) =>
-        if(lobby.contains(id)) {
+        if(lobby.contains(id) || lobby.length >= MaxPlayers) {
           state
         } else {
           WaitingState(lobby.appended(id))
@@ -89,35 +53,47 @@ object SessionService extends ISessionService{
     }
 
     def RevealAllDeck(cards : Seq[(Card,Boolean)]) : Seq[Card] = cards.map((c,b) => c)
+
+    def GenerateThreats(cards: Deck, left : Int) : Seq[Card] = {
+      val (newThreat,newDeck) = TakeFirstCardOfType(cards,Threat)
+      if(left == 0) {
+        newThreat match
+          case Some(c) => Seq(c)
+          case None => Seq()
+      } else {
+        newThreat match
+          case Some(c) => Seq(c) ++ GenerateThreats(newDeck,left-1)
+          case None => Seq()
+      }
+    }
     
     state match {
       case WaitingState(lobby) => WaitingState(lobby)
-      case VotingState(playersAndVotes,rnd,apok,bunker) =>
-        val voted = playersAndVotes.map((id,voteOpt,deck) => {
+      case VotingState(playersAndVotes, rnd, apok, bunker) =>
+        val voted = playersAndVotes.map { case (id, voteOpt, deck) =>
           voteOpt match
             case Some(vote) => 1
             case None => 0
-        }).sum
-        if(voted == playersAndVotes.length) {
-          if (rnd == LastRound) then {
-            GameEnded(playersAndVotes.map((l, o, d) => (l,RevealAllDeck(d))),
-              apok,bunker,Seq())
-          }
+        }.sum
 
-          if (voted == playersAndVotes.length) then {
-            val votes = playersAndVotes.map((id, voteOpt, deck) => {
-              voteOpt match
-                case Some(vote) => vote
-            })
-            val toKick = MostFrequent(votes).head
-            val newPlayers = playersAndVotes.filter((l, o, d) => l != toKick).map((l, o, d) => (l, d))
-            val newBunker = RevealFirstUnrevealedCard(bunker)
-            PlayingState(rnd, 0, newPlayers, apok, newBunker)
+        if (voted == playersAndVotes.length) {
+          val votes = playersAndVotes.flatMap { case (id, voteOpt, deck) => voteOpt }
+          val toKick = MostFrequent(votes).head
+          val newPlayers = playersAndVotes.filter { case (l, _, _) => l != toKick }.map { case (l, _, d) => (l, d) }
+          val newBunker = RevealFirstUnrevealedCard(bunker)
+
+          if (rnd + 1 >= LastRound) {
+            GameEnded(
+              newPlayers.map { case (l, d) => (l, d.map { case (c, b) => c }) },
+              apok,
+              newBunker,
+              GenerateThreats(TestDeck(),newPlayers.length)
+            )
           } else {
-            VotingState(playersAndVotes, rnd, apok, bunker)
+            PlayingState(rnd + 1, 0, newPlayers, apok, newBunker)
           }
         } else {
-          VotingState(playersAndVotes,rnd,apok,bunker)
+          VotingState(playersAndVotes, rnd, apok, bunker)
         }
 
       case GameEnded(winners,apok,bunker,threats) =>
@@ -181,7 +157,7 @@ object SessionService extends ISessionService{
                 }
               )
 
-              PlayingState(rnd,trn,newPlayers,apok,bunker)
+              PlayingState(rnd,trn+1,newPlayers,apok,bunker)
             }
           case None => state
       case _ => state
@@ -237,7 +213,7 @@ object SessionService extends ISessionService{
       case WaitingState(players) =>
         players.headOption match
           case Some(host) =>
-            if host == initiator then {
+            if host == initiator && players.length >= 4  then {
               val deck = TestDeck()
               val shuffledDeck = ShuffleDeck(deck,42)
               val playersDecks = GenerateDeckForPlayer(shuffledDeck,players.length)

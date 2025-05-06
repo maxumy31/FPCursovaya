@@ -25,11 +25,11 @@ export type WebsocketCommands =
   }
 } | 
  {
-  "operationType":"makeMove",
+  "operationType":"revealCard",
   data : {
     "id":string,
     "sessionId":string,
-    "cardId":number,
+    "cardId":string,
   }
 } | 
  {
@@ -76,6 +76,12 @@ export type ReveableCard = {
   "isRevealed":boolean
 }
 
+export type PlayerWithVotesAndCards = {
+  "id":string,
+  "voted":string|null,
+  "cards":ReveableCard[]
+}
+
 export type GameStateMessage = {
   "type":"waitingState",
   "players":string[]
@@ -86,6 +92,20 @@ export type GameStateMessage = {
   "players":PlayersWithReveableCards[],
   "apokalipsis":ReveableCard,
   "bunkerCards":ReveableCard[]
+} | {
+  "type":"votingsState",
+  "players":PlayerWithVotesAndCards[],
+  "round":number,
+  "apokalipsis":ReveableCard,
+  "bunkerCards":ReveableCard[]
+} | {
+  "type":"playerKicked"
+} | {
+  "type":"gameEnded",
+  "players":PlayersWithReveableCards[],
+  "apokalipsis":ReveableCard,
+  "bunkerCards":ReveableCard[],
+  "threats":ReveableCard[]
 }
 
 export const PrepareConnectionMessage = (userId:string,sessionId:string):WebsocketCommands => {
@@ -100,11 +120,12 @@ export const PrepareConnectionMessage = (userId:string,sessionId:string):Websock
 
 export const PrepareRevealCardMessage = (userId:string,cardId:number,sessionId:string):WebsocketCommands => {
   return {
-    "operationType":"makeMove",
+    "operationType":"revealCard",
     "data" : {
       "id":userId,
       "sessionId":sessionId,
-      "cardId":cardId,
+      //Да. Поле явно число, но если прислать число на скалу, то цирк(circe) не сможет ее распарсить :3
+      "cardId":String(cardId),
     }
   }
 }
@@ -154,9 +175,14 @@ export const ParseMessage = (message:any):O.Option<GameStateMessage> => {
           }
           return waitingState
           case "playingState":
-            const a = parseGameStateMessage(json)
-            console.log(a)
-            return a
+            return parseGameStateMessage(json)
+          case "votingState":
+            return transformToVotingsState(json)
+          case "playerKicked":
+            return {type:"playerKicked"}
+          case "gameEnded":
+            return parseEndState(json)
+
       }
       throw new Error("Cannot parse")
     }
@@ -168,12 +194,10 @@ export const ParseMessage = (message:any):O.Option<GameStateMessage> => {
 
 
 export function parseGameStateMessage(json: any): GameStateMessage {
-  // Валидация базовой структуры
   if (typeof json !== "object" || json === null) {
     throw new Error("Invalid JSON structure");
   }
 
-  // Парсинг карт с флагом раскрытия
   const parseReveableCard = (cardData: any): ReveableCard => {
     if (!Array.isArray(cardData) || cardData.length !== 2) {
       throw new Error("Invalid card format");
@@ -189,7 +213,6 @@ export function parseGameStateMessage(json: any): GameStateMessage {
     };
   };
 
-  // Парсинг игроков
   const parsePlayers = (playersData: any[]): PlayersWithReveableCards[] => {
     return playersData.map(playerData => {
       if (!Array.isArray(playerData) || playerData.length !== 2) {
@@ -204,25 +227,85 @@ export function parseGameStateMessage(json: any): GameStateMessage {
     });
   };
 
-  // Парсинг бункерных карт
   const parseBunkerCards = (cardsData: any[]): ReveableCard[] => {
     return cardsData.map(cardData => ({
       ...parseReveableCard(cardData),
-      // Для бункерных карт принудительно выставляем тип
       cardType: "Bunker"
     }));
   };
 
-  // Основной парсинг
   return {
     type: "playingState",
     round: Number(json.round),
     turn: Number(json.turn),
     players: parsePlayers(json.players),
     apokalipsis: {
-      ...parseReveableCard([json.apokalipsisCard, true]), // Предполагаем что апокалипсис всегда раскрыт
+      ...parseReveableCard([json.apokalipsisCard, true]),
       cardType: "Apokalipsis"
     },
     bunkerCards: parseBunkerCards(json.bunkerCards)
   };
+}
+
+export function transformToVotingsState(rawData: any): GameStateMessage {
+  const transformCards = (cardsArray: any[]): ReveableCard[] => 
+    cardsArray.map(([cardData, isRevealed]) => ({
+      cardType: cardData.cardType,
+      description: cardData.description,
+      isRevealed
+    }));
+
+  return {
+    type: "votingsState",
+    players: rawData.playersAndVotes.map((playerData: any[]) => ({
+      id: playerData[0],
+      voted: playerData[1],
+      cards: transformCards(playerData[2])
+    })),
+    round: rawData.turn, 
+    apokalipsis: {
+      cardType: rawData.apokalipsisCard.cardType,
+      description: rawData.apokalipsisCard.description,
+      isRevealed: true 
+    },
+    bunkerCards: rawData.bunkerCards.map((card: any) => ({
+      ...card,
+      isRevealed: true
+    }))
+  };
+}
+
+export function parseEndState(rawData: any): GameStateMessage {
+  
+  if (rawData.type === 'gameEnded') {
+    return {
+      type: 'gameEnded',
+      players: rawData.winners.map(([id, cards]: [string, any[]]) => ({
+        id,
+        cards: cards.map(card => ({
+          cardType: Object.keys(card.cardType)[0],
+          description: card.description,
+          isRevealed: true
+        }))
+      })),
+      apokalipsis: {
+        cardType: Object.keys(rawData.apokalipsisCard.cardType)[0],
+        description: rawData.apokalipsisCard.description,
+        isRevealed: true
+      },
+      bunkerCards: rawData.bunkerCards.map(([card, isRevealed]: [any, boolean]) => ({
+        cardType: Object.keys(card.cardType)[0],
+        description: card.description,
+        isRevealed
+      })),
+      threats: rawData.threats.map(([card,isRevealed] : [any,boolean]) => ({
+        cardType: Object.keys(card.cardType)[0],
+        description: card.description,
+        isRevealed
+      })),
+    }
+  }
+
+
+  throw new Error(`Unsupported message type: ${rawData.type}`);
 }
