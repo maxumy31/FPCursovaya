@@ -4,6 +4,9 @@ import Application.*
 import Domain.*
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
+import cats.data.{Reader, State}
+
+import scala.util.Random
 
 
 sealed trait SessionCommand
@@ -16,38 +19,44 @@ case class VoteForPlayer(notifyActor: ActorRef[NotifyCommand], target:String, in
 
 
 object SessionActor {
-  val MaxPlayersPerSession = 16
-  def apply(state:GameState)(sessionService: ISessionService): Behavior[SessionCommand] =
+  val shuffleSeedState : State[Int,Unit] = State((x: Int) => {
+    (((x * 10) + 5),())})
+  
+  
+  def apply(state:GameState, shuffleSeed : Int)(sessionService: ISessionService): Behavior[SessionCommand] =
       Behaviors.receive{(ctx,msg) => {
         msg match
           case AddGuestPlayer(notify,gId) =>
             val nextState = sessionService.AddPlayerService(state,gId)
             notify ! NotifyWith(nextState)
-            this(nextState)(sessionService)
+            this(nextState,shuffleSeed)(sessionService)
           case LeaveGame(notify,gId) =>
             val nextState = sessionService.DeletePlayerService(state,gId)
             notify ! NotifyWith(nextState)
-            this(nextState)(sessionService)
+            this(nextState,shuffleSeed)(sessionService)
           case RevealCard(ntf,gId,cId) =>
-            val nextState = sessionService.TransferNextState(sessionService.RevealCard(state,cId,gId))
+            val randInt = shuffleSeedState.run(shuffleSeed).value._1
+            val nextState = sessionService.TransferNextState(sessionService.RevealCard(state,cId,gId),randInt)
             ntf ! NotifyWith(nextState)
-            this(nextState)(sessionService)
+            this(nextState,randInt)(sessionService)
           case StartGame(ntf,gId) =>
-            val nextState = sessionService.StartGame(state,gId)
+            val randInt = shuffleSeedState.run(shuffleSeed).value._1
+            val nextState = sessionService.StartGame(state,gId,randInt)
             ntf ! NotifyWith(nextState)
-            this(nextState)(sessionService)
+            this(nextState,randInt)(sessionService)
           case VoteForPlayer(ntf,trg,init) =>
             val stateBefore = state
             val stateAfterVoting = sessionService.VotePlayer(state, trg,init)
+            val randInt = shuffleSeedState.run(shuffleSeed).value._1
             val stateAfter = stateAfterVoting
-            val nextState = sessionService.TransferNextState(stateAfterVoting)
+            val nextState = sessionService.TransferNextState(stateAfterVoting,randInt)
             val lostPlayer = GetLostPlayer(GetPlayers(stateBefore),GetPlayers(nextState))
             ctx.log.error(lostPlayer.toString)
             lostPlayer match
               case Some(pl) => ntf ! PlayerKicked(pl)
               case None =>
             ntf ! NotifyWith(nextState)
-            this (nextState)(sessionService)
+            this (nextState,randInt)(sessionService)
       }}
 }
 

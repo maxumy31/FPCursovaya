@@ -40,7 +40,7 @@ object SessionManagerActor  {
 
         case IdForSessionCreated(replyTo, id) =>
           ctx.log.info(s"New session with id $id registered")
-          val newSessionRef = ctx.spawnAnonymous(SessionActor(WaitingState(Seq()))(SessionService))
+          val newSessionRef = ctx.spawnAnonymous(SessionActor(WaitingState(Seq()),42)(SessionService))
           replyTo ! SessionCreatedResponse(id)
           this (SessionIdGenerator)(map.updated(id, newSessionRef))
 

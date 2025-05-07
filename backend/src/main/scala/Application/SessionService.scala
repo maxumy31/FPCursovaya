@@ -11,11 +11,11 @@ sealed trait ISessionService:
   val MaxPlayers = 8
   def apply(state:GameState, command : SessionCommand) : GameState
   def AddPlayerService(state: GameState,id : String):GameState
-  def TransferNextState(state: GameState) : GameState
+  def TransferNextState(state: GameState, shuffleSeed : Int) : GameState
   def VotePlayer(state:GameState, target:String, from : String) : GameState
   def RevealCard(state:GameState, card:Int, id:String) : GameState
   def DeletePlayerService(state:GameState, whoToDelete:String) : GameState
-  def StartGame(state:GameState, initiator : String) : GameState
+  def StartGame(state:GameState, initiator : String, shuffleSeed:Int) : GameState
 
 object SessionService extends ISessionService{
 
@@ -30,7 +30,7 @@ object SessionService extends ISessionService{
       case _ => state
   }
 
-  def TransferNextState(state: GameState): GameState = {
+  def TransferNextState(state: GameState, shuffleSeed:Int): GameState = {
     def MostFrequent(items: Seq[String]): Seq[String] = {
       if (items.isEmpty) return Seq.empty
 
@@ -87,7 +87,7 @@ object SessionService extends ISessionService{
               newPlayers.map { case (l, d) => (l, d.map { case (c, b) => c }) },
               apok,
               newBunker,
-              GenerateThreats(TestDeck(),newPlayers.length)
+              GenerateThreats(ShuffleDeck(TestDeck(),shuffleSeed),newPlayers.length)
             )
           } else {
             PlayingState(rnd + 1, 0, newPlayers, apok, newBunker)
@@ -174,7 +174,7 @@ object SessionService extends ISessionService{
         WaitingState(players.flatMap(l => if( l == whoToDelete) then None else Some(l)))
   }
 
-  def StartGame(state:GameState, initiator : String) : GameState = {
+  def StartGame(state:GameState, initiator : String,shuffleSeed:Int) : GameState = {
     def GenerateDeckForPlayer(deck : Deck,left:Int) : Seq[Seq[Card]] = {
       val (set,newDeck) = GeneratePlayerSet(deck)
       if(left <= 0) {
@@ -215,7 +215,7 @@ object SessionService extends ISessionService{
           case Some(host) =>
             if host == initiator && players.length >= 4  then {
               val deck = TestDeck()
-              val shuffledDeck = ShuffleDeck(deck,42)
+              val shuffledDeck = ShuffleDeck(deck,shuffleSeed)
               val playersDecks = GenerateDeckForPlayer(shuffledDeck,players.length)
               val apokalipsisCard = TakeFirstCardOfType(deck,Apokalipsis)._1.get
               val zippedCards = players.zip(playersDecks).map((id,card) => (id,RevealTypeCard(card,Profession)))
