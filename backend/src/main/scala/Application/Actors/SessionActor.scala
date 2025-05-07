@@ -19,10 +19,10 @@ case class VoteForPlayer(notifyActor: ActorRef[NotifyCommand], target:String, in
 
 
 object SessionActor {
-  val shuffleSeedState : State[Int,Unit] = State((x: Int) => {
-    (((x * 10) + 5),())})
-  
-  
+  private val shuffleSeedState : State[Int,Unit] = State((x: Int) => {
+    (((x * 214013) + 2531011) % Int.MaxValue,())})
+
+
   def apply(state:GameState, shuffleSeed : Int)(sessionService: ISessionService): Behavior[SessionCommand] =
       Behaviors.receive{(ctx,msg) => {
         msg match
