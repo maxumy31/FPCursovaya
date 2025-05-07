@@ -56,7 +56,12 @@ object SessionActor {
               case Some(pl) => ntf ! PlayerKicked(pl)
               case None =>
             ntf ! NotifyWith(nextState)
-            this (nextState,randInt)(sessionService)
+            nextState match
+              case GameEnded(_,_,_,_) =>
+                ctx.log.info("Session died")
+                Behaviors.stopped
+              case _ =>
+                this (nextState,randInt)(sessionService)
       }}
 }
 
